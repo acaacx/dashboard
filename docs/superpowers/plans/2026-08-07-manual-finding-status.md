@@ -89,7 +89,7 @@ The highest-risk change in the whole plan. `reconcileFinding` spreads `...incomi
 - Consumes: nothing.
 - Produces: `SecurityFinding.statusReason?: string`, `SecurityFinding.statusChangedAt?: string`. Every later task depends on these two names.
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 Append to `tests/lifecycle.test.ts`:
 
@@ -152,7 +152,7 @@ The third test matters: a scanner adapter must never be able to plant a justific
 
 `tests/lifecycle.test.ts` already has a local `finding()` helper — reuse it, do not define another. Confirm its name with `grep -n "function finding" tests/lifecycle.test.ts` before writing.
 
-- [ ] **Step 2: Run the tests to verify they fail**
+- [x] **Step 2: Run the tests to verify they fail**
 
 ```bash
 npx vitest run tests/lifecycle.test.ts
@@ -160,7 +160,7 @@ npx vitest run tests/lifecycle.test.ts
 
 Expected: the first two fail on `undefined` not matching the reason; the third may pass by accident depending on the helper. TypeScript will also complain that `statusReason` is not a property of `SecurityFinding` — that is the expected first failure.
 
-- [ ] **Step 3: Add the domain fields**
+- [x] **Step 3: Add the domain fields**
 
 In `src/domain/security/finding.ts`, directly after `resolvedAt?: string;`:
 
@@ -176,7 +176,7 @@ In `src/domain/security/finding.ts`, directly after `resolvedAt?: string;`:
   statusChangedAt?: string;
 ```
 
-- [ ] **Step 4: Preserve the fields in reconcileFinding**
+- [x] **Step 4: Preserve the fields in reconcileFinding**
 
 In `src/lib/security/lifecycle.ts`, the NEW branch (currently lines 55-64) must strip anything an adapter supplied:
 
@@ -211,7 +211,7 @@ And the `merged` object (currently lines 79-90) gains two entries in its "stable
 
 The REOPENED branch spreads `...merged`, so it inherits both fields with no further change.
 
-- [ ] **Step 5: Run the tests to verify they pass**
+- [x] **Step 5: Run the tests to verify they pass**
 
 ```bash
 npx vitest run tests/lifecycle.test.ts
@@ -219,7 +219,7 @@ npx vitest run tests/lifecycle.test.ts
 
 Expected: PASS, all three new tests plus every pre-existing one.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add src/domain/security/finding.ts src/lib/security/lifecycle.ts tests/lifecycle.test.ts
@@ -252,7 +252,7 @@ A dependency-light module both the Server Action and the client components impor
   - `type SetStatusResult = { ok: true; finding: SecurityFinding } | { ok: false; code: string; message: string }`
   - `type SetFindingStatusAction = (id: string, status: FindingStatus, reason: string | undefined) => Promise<SetStatusResult>`
 
-- [ ] **Step 1: Write the module**
+- [x] **Step 1: Write the module**
 
 ```ts
 import { FINDING_STATUSES, type FindingStatus } from "@/domain/security/enums";
@@ -303,7 +303,7 @@ export type SetFindingStatusAction = (
 ) => Promise<SetStatusResult>;
 ```
 
-- [ ] **Step 2: Verify it compiles**
+- [x] **Step 2: Verify it compiles**
 
 ```bash
 npm run typecheck
@@ -311,7 +311,7 @@ npm run typecheck
 
 Expected: clean.
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
 ```bash
 git add src/lib/security/status-change.ts
@@ -342,7 +342,7 @@ Co-Authored-By: Claude Opus 5 <noreply@anthropic.com>"
   - `InvalidStatusReasonError` — `code: "INVALID_STATUS_REASON"`, `httpStatus: 400`
   - `SecurityService.setFindingStatus(id: string, status: FindingStatus, reason: string | undefined, now?: Date): Promise<SecurityFinding | null>`
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 Create `tests/services/finding-status.test.ts`:
 
@@ -467,7 +467,7 @@ describe("SecurityService.setFindingStatus", () => {
 
 `SecurityService`'s constructor is `(findings, scanRuns = new InMemoryScanRunRepository(), supportedScanners = [])`, so the one-argument construction above is correct.
 
-- [ ] **Step 2: Run the tests to verify they fail**
+- [x] **Step 2: Run the tests to verify they fail**
 
 ```bash
 npx vitest run tests/services/finding-status.test.ts
@@ -475,7 +475,7 @@ npx vitest run tests/services/finding-status.test.ts
 
 Expected: FAIL — `InvalidStatusReasonError` is not exported, and `setFindingStatus` takes three parameters.
 
-- [ ] **Step 3: Add the error classes**
+- [x] **Step 3: Add the error classes**
 
 In `src/domain/security/errors.ts`, before `isSecurityDomainError`:
 
@@ -503,7 +503,7 @@ export class InvalidStatusReasonError extends SecurityDomainError {
 }
 ```
 
-- [ ] **Step 4: Add the schema**
+- [x] **Step 4: Add the schema**
 
 In `src/lib/security/validation/schemas.ts`, import the limit and export the schema next to the other field schemas:
 
@@ -526,7 +526,7 @@ export const statusReasonSchema = z
   .max(MAX_STATUS_REASON_LENGTH);
 ```
 
-- [ ] **Step 5: Rewrite setFindingStatus**
+- [x] **Step 5: Rewrite setFindingStatus**
 
 Replace the method at `src/lib/security/services/security-service.ts:294-316`:
 
@@ -597,7 +597,7 @@ import { MAX_STATUS_REASON_LENGTH } from "../status-change";
 
 `canTransition` is already imported at line 20 — extend that import rather than duplicating it.
 
-- [ ] **Step 6: Fix the existing call site**
+- [x] **Step 6: Fix the existing call site**
 
 `tests/repository/postgres-ingestion.test.ts:137` currently calls the method with two arguments. Change it to:
 
@@ -609,7 +609,7 @@ import { MAX_STATUS_REASON_LENGTH } from "../status-change";
       );
 ```
 
-- [ ] **Step 7: Run the tests to verify they pass**
+- [x] **Step 7: Run the tests to verify they pass**
 
 ```bash
 npx vitest run tests/services/finding-status.test.ts tests/repository/postgres-ingestion.test.ts
@@ -617,7 +617,7 @@ npx vitest run tests/services/finding-status.test.ts tests/repository/postgres-i
 
 Expected: PASS. The Postgres file skips without `TEST_DATABASE_URL`; export it so it actually runs.
 
-- [ ] **Step 8: Commit**
+- [x] **Step 8: Commit**
 
 ```bash
 git add src/domain/security/errors.ts src/lib/security/validation/schemas.ts src/lib/security/services/security-service.ts tests/services/finding-status.test.ts tests/repository/postgres-ingestion.test.ts
@@ -645,7 +645,7 @@ Co-Authored-By: Claude Opus 5 <noreply@anthropic.com>"
 - Consumes: the two domain fields from Task 1.
 - Produces: both fields persisted by every driver, reading back `undefined` when unset.
 
-- [ ] **Step 1: Write the failing contract assertions**
+- [x] **Step 1: Write the failing contract assertions**
 
 In `tests/repository/repository-contract.ts`, extend the `rich` object in "round-trips every field of a finding" (after `metadata`):
 
@@ -695,7 +695,7 @@ And add a new test after "updates by id and returns the merged finding":
     });
 ```
 
-- [ ] **Step 2: Run the contract suite to verify it fails**
+- [x] **Step 2: Run the contract suite to verify it fails**
 
 ```bash
 npx vitest run tests/repository/
@@ -703,7 +703,7 @@ npx vitest run tests/repository/
 
 Expected: the in-memory contract run PASSES all three (it stores whole objects). The Postgres run FAILS — the columns do not exist, so the values never survive a round trip. That asymmetry is exactly what the shared contract exists to expose.
 
-- [ ] **Step 3: Write the migration**
+- [x] **Step 3: Write the migration**
 
 Create `db/migrations/002_finding_status_reason.sql`:
 
@@ -727,7 +727,7 @@ ALTER TABLE security_findings
 
 No index: neither column is filtered or sorted on.
 
-- [ ] **Step 4: Update the PostgreSQL repository**
+- [x] **Step 4: Update the PostgreSQL repository**
 
 Six edits in `src/lib/security/repository/postgres-security-finding-repository.ts`. All six are required; missing one produces a silent data-loss bug rather than a compile error.
 
@@ -781,7 +781,7 @@ Also update the comment at line 175-178, which cites the old column count:
  */
 ```
 
-- [ ] **Step 5: Teach the test harness about the new migration**
+- [x] **Step 5: Teach the test harness about the new migration**
 
 `tests/helpers/postgres.ts:19-30` hardcodes `001_init.sql`, so a new migration is invisible to every Postgres test until this is fixed. Read the directory instead, so migration `003` never needs this step again:
 
@@ -810,7 +810,7 @@ export function migrationSql(): string {
 
 Add `readdirSync` to the existing `node:fs` import. Confirm `scripts/migrate.mjs` already orders by filename — `grep -n "sort" scripts/migrate.mjs` — so the two paths agree.
 
-- [ ] **Step 6: Run the contract suite**
+- [x] **Step 6: Run the contract suite**
 
 ```bash
 export TEST_DATABASE_URL=postgres://postgres:postgres@localhost:5433/dashboard_test
@@ -819,7 +819,7 @@ npx vitest run tests/repository/
 
 Expected: PASS for both the in-memory and the PostgreSQL contract runs.
 
-- [ ] **Step 7: Commit**
+- [x] **Step 7: Commit**
 
 ```bash
 git add db/migrations/002_finding_status_reason.sql src/lib/security/repository/postgres-security-finding-repository.ts tests/repository/repository-contract.ts tests/helpers/postgres.ts
@@ -845,7 +845,7 @@ Co-Authored-By: Claude Opus 5 <noreply@anthropic.com>"
 - Consumes: `SetStatusResult`, `selectableTransitions` (Task 2); `SecurityService.setFindingStatus` (Task 3); `getSecurityService` from `src/lib/security/container.ts`.
 - Produces: `setFindingStatusAction: SetFindingStatusAction`.
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 Create `tests/actions/finding-status-action.test.ts`:
 
@@ -962,7 +962,7 @@ describe("setFindingStatusAction", () => {
 
 The last test is the one that matters: a database error message can carry an internal hostname, and this is the boundary that must not pass it on.
 
-- [ ] **Step 2: Run the tests to verify they fail**
+- [x] **Step 2: Run the tests to verify they fail**
 
 ```bash
 npx vitest run tests/actions/finding-status-action.test.ts
@@ -970,7 +970,7 @@ npx vitest run tests/actions/finding-status-action.test.ts
 
 Expected: FAIL — the module does not exist.
 
-- [ ] **Step 3: Write the action**
+- [x] **Step 3: Write the action**
 
 Create `src/app/dashboard/security/actions.ts`:
 
@@ -1045,7 +1045,7 @@ export async function setFindingStatusAction(
 
 The explicit `RESOLVED` check is deliberate rather than a call to `selectableTransitions`: it yields a specific, useful message instead of a generic rejection, and the action does not need the finding's current status to make that call.
 
-- [ ] **Step 4: Run the tests to verify they pass**
+- [x] **Step 4: Run the tests to verify they pass**
 
 ```bash
 npx vitest run tests/actions/finding-status-action.test.ts
@@ -1053,7 +1053,7 @@ npx vitest run tests/actions/finding-status-action.test.ts
 
 Expected: PASS, all seven.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add src/app/dashboard/security/actions.ts tests/actions/finding-status-action.test.ts
@@ -1084,7 +1084,7 @@ Co-Authored-By: Claude Opus 5 <noreply@anthropic.com>"
 
   Both optional: the drawer still renders read-only when they are absent, which keeps every existing call site compiling.
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 Create `tests/components/finding-details.test.tsx`:
 
@@ -1226,7 +1226,7 @@ describe("FindingDetails decision section", () => {
 
 `tests/setup.ts` already imports `@testing-library/jest-dom/vitest` and calls `cleanup()` after each test, so `toHaveValue` works and no per-file teardown is needed.
 
-- [ ] **Step 2: Run the tests to verify they fail**
+- [x] **Step 2: Run the tests to verify they fail**
 
 ```bash
 npx vitest run tests/components/finding-details.test.tsx
@@ -1234,7 +1234,7 @@ npx vitest run tests/components/finding-details.test.tsx
 
 Expected: FAIL — no select labelled "Change status to".
 
-- [ ] **Step 3: Add the props and the decision section**
+- [x] **Step 3: Add the props and the decision section**
 
 In `src/components/security/finding-details.tsx`, extend the imports:
 
@@ -1413,7 +1413,7 @@ function DecisionForm({
 }
 ```
 
-- [ ] **Step 4: Run the tests to verify they pass**
+- [x] **Step 4: Run the tests to verify they pass**
 
 ```bash
 npx vitest run tests/components/finding-details.test.tsx
@@ -1421,7 +1421,7 @@ npx vitest run tests/components/finding-details.test.tsx
 
 Expected: PASS, all five.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add src/components/security/finding-details.tsx tests/components/finding-details.test.tsx
@@ -1449,7 +1449,7 @@ Co-Authored-By: Claude Opus 5 <noreply@anthropic.com>"
 
 **Trap:** `findings-table.tsx` does not currently import from `next/navigation`. Adding `useRouter` breaks every existing test in `tests/components/findings-table.test.tsx` until the module is mocked. Do the mock in the same step as the import.
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 Add the mock at the top of `tests/components/findings-table.test.tsx`, after the existing imports:
 
@@ -1496,7 +1496,7 @@ it("refetches the current query and refreshes the page after a status change", a
 
 Add `refresh.mockReset()` to the existing `beforeEach`.
 
-- [ ] **Step 2: Run the tests to verify they fail**
+- [x] **Step 2: Run the tests to verify they fail**
 
 ```bash
 npx vitest run tests/components/findings-table.test.tsx
@@ -1504,7 +1504,7 @@ npx vitest run tests/components/findings-table.test.tsx
 
 Expected: FAIL — `setStatusAction` is not a prop and no select is rendered.
 
-- [ ] **Step 3: Wire the table**
+- [x] **Step 3: Wire the table**
 
 In `src/components/security/findings-table.tsx`, extend the imports:
 
@@ -1582,7 +1582,7 @@ And pass both down at line 453:
       )}
 ```
 
-- [ ] **Step 4: Wire the page**
+- [x] **Step 4: Wire the page**
 
 In `src/app/dashboard/security/page.tsx`, import the action and pass it:
 
@@ -1599,7 +1599,7 @@ import { setFindingStatusAction } from "./actions";
         />
 ```
 
-- [ ] **Step 5: Run the tests to verify they pass**
+- [x] **Step 5: Run the tests to verify they pass**
 
 ```bash
 npx vitest run tests/components/
@@ -1607,7 +1607,7 @@ npx vitest run tests/components/
 
 Expected: PASS — the new test and every pre-existing one in both component files.
 
-- [ ] **Step 6: Verify it in the running app**
+- [x] **Step 6: Verify it in the running app**
 
 Restart the dev server rather than relying on a save: **the container is cached on `globalThis`** so it survives HMR, and container or seeding changes need a restart.
 
@@ -1615,7 +1615,7 @@ Start it through the preview tooling (never `npm run dev` in a shell), open `/da
 
 Mock data is tuned to exactly 23 open / 3 critical / 7 high / 13 medium / 0 low — the tile should read one fewer open after an acceptance.
 
-- [ ] **Step 7: Commit**
+- [x] **Step 7: Commit**
 
 ```bash
 git add src/components/security/findings-table.tsx src/app/dashboard/security/page.tsx tests/components/findings-table.test.tsx
@@ -1639,17 +1639,17 @@ Co-Authored-By: Claude Opus 5 <noreply@anthropic.com>"
 **Files:**
 - Modify: `README.md` — "Security finding lifecycle" (line ~157), "Schema" (line ~426), "Testing" (line ~529), "Known limitations" (line ~573)
 
-- [ ] **Step 1: Document the manual decision path**
+- [x] **Step 1: Document the manual decision path**
 
 In "Security finding lifecycle", add a subsection covering: which statuses a person can set from the drawer, that a justification is required for all three and stored in `statusReason` with `statusChangedAt`, that reopening without a reason clears it, that manual `RESOLVED` is deliberately not offered because it would make MTTR assertable by hand, and that no actor is recorded because there is no authentication to derive one from.
 
-- [ ] **Step 2: Document the schema and the write path**
+- [x] **Step 2: Document the schema and the write path**
 
 In "Schema", add `status_reason TEXT` and `status_changed_at TIMESTAMPTZ`, noting migration `002` and that neither is indexed because neither is filtered or sorted on.
 
 Add a short "Changing a finding's status" note stating that the write path is a Server Action, not an API route, and why: no user authentication exists, the ingest token belongs to CI, and a public endpoint able to mark a CRITICAL finding as a false positive is a way to hide a vulnerability.
 
-- [ ] **Step 3: Correct the limitations**
+- [x] **Step 3: Correct the limitations**
 
 Remove:
 
@@ -1659,7 +1659,7 @@ Add:
 
 > - Anyone who can reach the dashboard can change a finding's status. There is no user authentication, so decisions are recorded with a justification but no author.
 
-- [ ] **Step 4: Update the test counts**
+- [x] **Step 4: Update the test counts**
 
 Run the suite both ways and write the real numbers into "Testing", replacing "272 tests without a database; 323 with one." Also update the contract suite's assertion count if the number of `it(` blocks in `tests/repository/repository-contract.ts` changed — Task 4 adds one, so 45 becomes 46.
 
@@ -1669,7 +1669,7 @@ export TEST_DATABASE_URL=postgres://postgres:postgres@localhost:5433/dashboard_t
 npx vitest run 2>&1 | tail -5
 ```
 
-- [ ] **Step 5: Run the full verification chain**
+- [x] **Step 5: Run the full verification chain**
 
 ```bash
 npm run lint && npm run typecheck && npm test && npm run build
@@ -1677,7 +1677,7 @@ npm run lint && npm run typecheck && npm test && npm run build
 
 Expected: all four clean, with `TEST_DATABASE_URL` exported so the Postgres suites run rather than skip. Do not claim the work is done on a run where they skipped.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add README.md

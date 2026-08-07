@@ -1,7 +1,7 @@
 # Manual finding status control
 
 **Date:** 2026-08-07
-**Status:** approved, not yet implemented
+**Status:** implemented on 2026-08-07, branch `feat/manual-finding-status`
 
 ## Problem
 
