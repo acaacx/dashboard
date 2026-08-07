@@ -52,11 +52,17 @@ escaping, page clamping, tiebreak ordering and MTTR-undefined-not-zero.
 docker run -d --name dashboard-test-pg -e POSTGRES_PASSWORD=postgres \
   -e POSTGRES_DB=dashboard_test -p 5433:5432 postgres:17-alpine
 export TEST_DATABASE_URL=postgres://postgres:postgres@localhost:5433/dashboard_test
-npm test          # 299 tests; without the URL, 248 + 2 skipped
+npm test          # 323 tests; without the URL, 272 + 2 skipped
 ```
 
 Migrations are forward-only SQL in `db/migrations/`, applied by
 `npm run db:migrate`. Add a new numbered file; never edit an applied one.
+
+Transient DB failures retry with jittered backoff (`src/lib/db/retry.ts`).
+Permanent errors — constraint violations, syntax, undefined table — must keep
+failing on the first attempt; if you widen `isRetryableDatabaseError`, you are
+probably hiding a bug. Retry wraps whole operations, never a statement inside an
+open transaction.
 
 ## Verify before claiming done
 

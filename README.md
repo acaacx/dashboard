@@ -447,6 +447,36 @@ Notes on the SQL:
 - filter values are always bound parameters; nothing is interpolated
 - `TIMESTAMPTZ` throughout, converted to ISO-8601 UTC at the repository boundary
 
+### Connection retry
+
+Transient database failures are retried with exponential backoff and **full
+jitter** — without jitter, every request that failed during a failover retries
+at the same instant and knocks the database over again as it comes back.
+
+What is retried, and what deliberately is not:
+
+| Retried | Not retried |
+|---|---|
+| connection class `08*` | unique/foreign-key violations `23*` |
+| operator intervention `57P01`–`57P04` (restart, failover) | syntax errors `42601` |
+| `40001` serialization / `40P01` deadlock | undefined table/column `42P01` |
+| `53300` too many connections | invalid input `22P02` |
+| socket errors: `ECONNRESET`, `ECONNREFUSED`, `ETIMEDOUT`, … | any unrecognised error |
+
+Retrying a constraint violation would burn the budget and hide the bug, so a
+recognised-but-permanent SQLSTATE fails on the first attempt.
+
+Retry is applied at the **operation** level, never to a single statement inside
+an open transaction — a connection lost mid-transaction leaves it aborted
+server-side, so `saveMany` replays the whole batch from `BEGIN`. This is only
+safe because every write is an idempotent upsert keyed on `fingerprint`/`id`:
+replaying one lands exactly the same row.
+
+Each retry emits a `db.query.retry` event carrying the operation label, attempt
+number and delay — never SQL or parameters. `npm run db:migrate` additionally
+retries its initial connect, since a freshly started database container accepts
+TCP before it finishes initialising.
+
 ### Seeding behaviour with a database
 
 Mock seeding runs only when the store is **empty**. On a durable database a
@@ -483,6 +513,9 @@ imports it.
 | `DATABASE_URL` | unset | PostgreSQL connection string. Setting it switches storage to Postgres. |
 | `SECURITY_STORAGE` | auto | Force `postgres` or `memory`, overriding the `DATABASE_URL` default. |
 | `DATABASE_POOL_MAX` | `10` | Maximum pooled connections. |
+| `DATABASE_MAX_RETRIES` | `3` | Retries after the first attempt on transient database failures. |
+| `DATABASE_RETRY_BASE_DELAY_MS` | `100` | First backoff step; doubles per attempt. |
+| `DATABASE_RETRY_MAX_DELAY_MS` | `2000` | Ceiling for a single backoff step. |
 | `TEST_DATABASE_URL` | unset | Test-only. When set, the Postgres test suites run against it. **Wiped between tests.** |
 
 ---
@@ -540,8 +573,8 @@ interactive state — so a coloured pixel always means something. Motion respect
 ## Known limitations
 
 - In-memory storage is still the default; Postgres is opt-in via `DATABASE_URL`.
-- No connection retry or circuit breaker: if Postgres is down, pages error rather
-  than degrading.
+- Transient database failures are retried, but there is no circuit breaker: a
+  sustained outage means every request pays the full retry budget before failing.
 - GitHub and Azure providers are declared and stubbed, not implemented; pages
   that would use them say so rather than showing placeholder data.
 - Manual status changes (accept risk, false positive) exist in the service and

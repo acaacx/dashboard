@@ -12,6 +12,8 @@ import {
 } from "@/domain/security/finding";
 import type { ScannerType, Severity } from "@/domain/security/enums";
 import { getPool } from "@/lib/db/pool";
+import { withRetry } from "@/lib/db/retry";
+import { recordSecurityEvent } from "../observability";
 import type { ResolutionScope } from "../lifecycle";
 import type {
   FilterOptions,
@@ -176,17 +178,44 @@ function toParams(finding: SecurityFinding): unknown[] {
  */
 const MAX_ROWS_PER_INSERT = 500;
 
+/** Surface retries as telemetry. Counts and labels only — never SQL or rows. */
+function reportRetry(info: {
+  attempt: number;
+  delayMs: number;
+  operation?: string;
+}): void {
+  recordSecurityEvent("db.query.retry", {
+    operation: info.operation,
+    attempt: info.attempt,
+    delayMs: info.delayMs,
+  });
+}
+
 export class PostgresSecurityFindingRepository
   implements SecurityFindingRepository
 {
   constructor(private readonly pool: Pool = getPool()) {}
 
+  /**
+   * Single-statement query with transient-failure retry.
+   *
+   * Safe to retry unconditionally: there is no open transaction here, and every
+   * statement issued through this path is either a read or an idempotent
+   * upsert. Multi-statement transactions retry as a whole unit instead — see
+   * `saveMany`.
+   */
   private async query<T>(
     text: string,
     params: readonly unknown[] = [],
+    operation = "findings.query",
   ): Promise<T[]> {
-    const result = await this.pool.query(text, params as unknown[]);
-    return result.rows as T[];
+    return withRetry(
+      async () => {
+        const result = await this.pool.query(text, params as unknown[]);
+        return result.rows as T[];
+      },
+      { operation, onRetry: reportRetry },
+    );
   }
 
   // --- reads ---------------------------------------------------------------
@@ -290,6 +319,19 @@ export class PostgresSecurityFindingRepository
   ): Promise<SecurityFinding[]> {
     if (findings.length === 0) return [];
 
+    // Retried as one unit, from BEGIN: a connection lost mid-transaction leaves
+    // the server-side transaction aborted, so replaying individual statements
+    // would fail. Replaying the whole batch is safe because the INSERT is an
+    // idempotent upsert on `fingerprint`.
+    return withRetry(() => this.saveManyOnce(findings), {
+      operation: "findings.saveMany",
+      onRetry: reportRetry,
+    });
+  }
+
+  private async saveManyOnce(
+    findings: readonly SecurityFinding[],
+  ): Promise<SecurityFinding[]> {
     const client = await this.pool.connect();
     try {
       await client.query("BEGIN");
@@ -351,7 +393,9 @@ export class PostgresSecurityFindingRepository
       await client.query("COMMIT");
       return [...findings];
     } catch (error) {
-      await client.query("ROLLBACK");
+      // A rollback on an already-dead connection throws again; the original
+      // error is what matters, so the attempt is best-effort.
+      await client.query("ROLLBACK").catch(() => undefined);
       throw error;
     } finally {
       client.release();

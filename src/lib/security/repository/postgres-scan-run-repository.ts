@@ -7,6 +7,8 @@ import type {
   ScanRunStatus,
 } from "@/domain/security/scan-run";
 import { getPool } from "@/lib/db/pool";
+import { withRetry } from "@/lib/db/retry";
+import { recordSecurityEvent } from "../observability";
 import type { ScanRunRepository } from "./scan-run-repository";
 
 /**
@@ -82,12 +84,27 @@ function toScanRun(row: ScanRunRow): ScanRun {
 export class PostgresScanRunRepository implements ScanRunRepository {
   constructor(private readonly pool: Pool = getPool()) {}
 
+  /** Single-statement query with transient-failure retry. */
   private async query<T>(
     text: string,
     params: readonly unknown[] = [],
+    operation = "scanRuns.query",
   ): Promise<T[]> {
-    const result = await this.pool.query(text, params as unknown[]);
-    return result.rows as T[];
+    return withRetry(
+      async () => {
+        const result = await this.pool.query(text, params as unknown[]);
+        return result.rows as T[];
+      },
+      {
+        operation,
+        onRetry: (info) =>
+          recordSecurityEvent("db.query.retry", {
+            operation: info.operation,
+            attempt: info.attempt,
+            delayMs: info.delayMs,
+          }),
+      },
+    );
   }
 
   async save(run: ScanRun): Promise<ScanRun> {

@@ -19,7 +19,8 @@ export type SecurityEventName =
   | "scan.findings.created"
   | "scan.findings.reopened"
   | "scan.findings.resolved"
-  | "scan.parser.error";
+  | "scan.parser.error"
+  | "db.query.retry";
 
 export interface SecurityEvent {
   name: SecurityEventName;

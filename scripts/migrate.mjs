@@ -23,6 +23,26 @@ const MIGRATIONS_DIR = path.join(
   "migrations",
 );
 
+/**
+ * Connect with backoff. A database container that has accepted a TCP
+ * connection is often still initialising, and CI would otherwise fail on a
+ * race that resolves itself in a second.
+ */
+async function connectWithRetry(client, attempts = 10, delayMs = 500) {
+  for (let attempt = 1; ; attempt += 1) {
+    try {
+      await client.connect();
+      return;
+    } catch (error) {
+      if (attempt >= attempts) throw error;
+      console.log(
+        `  waiting for database (attempt ${attempt}/${attempts}): ${error.message}`,
+      );
+      await new Promise((resolve) => setTimeout(resolve, delayMs));
+    }
+  }
+}
+
 async function main() {
   const connectionString = process.env.DATABASE_URL?.trim();
   if (!connectionString) {
@@ -42,7 +62,7 @@ async function main() {
     ssl: useSsl ? { rejectUnauthorized: false } : undefined,
   });
 
-  await client.connect();
+  await connectWithRetry(client);
 
   try {
     await client.query(`
