@@ -1,5 +1,6 @@
 "use client";
 
+import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import {
@@ -15,6 +16,7 @@ import { CategoryBadge, ScannerBadge, SeverityBadge, StatusBadge } from "@/compo
 import { EmptyState } from "@/components/ui/panel";
 import { formatDate } from "@/lib/format";
 import type { FilterOptions } from "@/lib/security/repository/security-finding-repository";
+import type { SetFindingStatusAction } from "@/lib/security/status-change";
 import { FindingDetails } from "./finding-details";
 
 /**
@@ -90,11 +92,17 @@ export function FindingsTable({
   filterOptions,
   initialSelected,
   initialState = DEFAULT_QUERY_STATE,
+  setStatusAction,
 }: {
   initialResult: Page<SecurityFinding>;
   filterOptions: FilterOptions;
   initialSelected?: SecurityFinding | null;
   initialState?: FindingsQueryState;
+  /**
+   * Server Action, injected by the page. Passing it as a prop rather than
+   * importing it keeps this component and its tests free of a server runtime.
+   */
+  setStatusAction?: SetFindingStatusAction;
 }) {
   const [state, setState] = useState<FindingsQueryState>(initialState);
   const [result, setResult] = useState(initialResult);
@@ -103,6 +111,8 @@ export function FindingsTable({
   );
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | undefined>();
+  const [refreshToken, setRefreshToken] = useState(0);
+  const router = useRouter();
 
   // Skip the fetch triggered by the initial render: the server already
   // supplied that exact result.
@@ -147,7 +157,23 @@ export function FindingsTable({
       clearTimeout(timer);
       controller.abort();
     };
-  }, [queryString]);
+  }, [queryString, refreshToken]);
+
+  const handleStatusChanged = useCallback(
+    (updated: SecurityFinding) => {
+      // Show what the server actually returned, never an optimistic guess.
+      setSelected(updated);
+      // Re-run the current query: a newly accepted finding drops out of the
+      // default OPEN filter on its own.
+      setRefreshToken((token) => token + 1);
+      // Re-render the server page so the "Accepted risk" and "Total open" stat
+      // tiles stop showing pre-change counts. This component seeds `result`
+      // from props into state, so a fresh initialResult prop is ignored and the
+      // user's filters survive.
+      router.refresh();
+    },
+    [router],
+  );
 
   const patch = useCallback(
     (next: Partial<FindingsQueryState>) => {
@@ -454,6 +480,8 @@ export function FindingsTable({
         <FindingDetails
           finding={selected}
           onClose={() => setSelected(null)}
+          onApplyStatus={setStatusAction}
+          onStatusChanged={handleStatusChanged}
         />
       )}
     </div>

@@ -12,6 +12,7 @@ import { Panel } from "@/components/ui/panel";
 import { Stat } from "@/components/ui/stat";
 import { formatDuration } from "@/lib/format";
 import { getSecurityService } from "@/lib/security/container";
+import { setFindingStatusAction } from "./actions";
 
 /** Per-request: findings change as pipelines report. */
 export const dynamic = "force-dynamic";
@@ -122,6 +123,7 @@ export default async function SecurityPage({
           initialResult={firstPage}
           filterOptions={filterOptions}
           initialSelected={selectedFinding}
+          setStatusAction={setFindingStatusAction}
         />
       </Panel>
     </>

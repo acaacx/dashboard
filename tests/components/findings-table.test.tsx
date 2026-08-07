@@ -7,6 +7,11 @@ import type { Page, SecurityFinding } from "@/domain/security/finding";
 import { FindingsTable } from "@/components/security/findings-table";
 import type { FilterOptions } from "@/lib/security/repository/security-finding-repository";
 
+const refresh = vi.fn();
+vi.mock("next/navigation", () => ({
+  useRouter: () => ({ refresh }),
+}));
+
 const filterOptions: FilterOptions = {
   repositories: ["payment-service", "user-service"],
   environments: ["production", "staging"],
@@ -66,6 +71,7 @@ const initialResult = page([
 let fetchMock: ReturnType<typeof vi.fn>;
 
 beforeEach(() => {
+  refresh.mockReset();
   fetchMock = vi.fn().mockResolvedValue({
     ok: true,
     json: async () => page([]),
@@ -338,5 +344,40 @@ describe("FindingsTable detail drawer", () => {
     );
 
     expect(await screen.findByRole("dialog")).toBeInTheDocument();
+  });
+
+  it("refetches the current query and refreshes the page after a status change", async () => {
+    const user = userEvent.setup();
+    const accepted = finding({
+      status: "ACCEPTED_RISK",
+      statusReason: "WAF rule.",
+    });
+    const setStatusAction = vi
+      .fn()
+      .mockResolvedValue({ ok: true, finding: accepted });
+
+    render(
+      <FindingsTable
+        initialResult={initialResult}
+        filterOptions={filterOptions}
+        setStatusAction={setStatusAction}
+      />,
+    );
+
+    await user.click(screen.getByText("Hardcoded AWS access key"));
+
+    await user.selectOptions(
+      screen.getByLabelText(/change status to/i),
+      "ACCEPTED_RISK",
+    );
+    await user.type(screen.getByLabelText(/reason/i), "WAF rule.");
+    await user.click(screen.getByRole("button", { name: /apply/i }));
+
+    // The drawer now shows the returned finding, not an optimistic guess.
+    await waitFor(() => expect(screen.getByText("WAF rule.")).toBeTruthy());
+
+    // The current query re-runs, so a finding that left the OPEN filter goes away.
+    await waitFor(() => expect(fetchMock).toHaveBeenCalled());
+    expect(refresh).toHaveBeenCalled();
   });
 });
