@@ -1,0 +1,67 @@
+{
+  "$schema": "https://json.schemastore.org/sarif-2.1.0.json",
+  "version": "2.1.0",
+  "runs": [
+    {
+      "tool": {
+        "driver": {
+          "name": "Semgrep OSS",
+          "semanticVersion": "1.95.0",
+          "informationUri": "https://semgrep.dev",
+          "rules": [
+            {
+              "id": "python.lang.security.audit.formatted-sql-query.formatted-sql-query",
+              "name": "formatted-sql-query",
+              "shortDescription": { "text": "SQL injection via string formatting" },
+              "fullDescription": {
+                "text": "User-controlled input is concatenated into a SQL statement."
+              },
+              "help": { "text": "Use a parameterised query." },
+              "helpUri": "https://example.invalid/sqli",
+              "defaultConfiguration": { "level": "error" },
+              "properties": {
+                "tags": ["security", "CWE-89", "OWASP-A03:2021"],
+                "security-severity": "9.1"
+              }
+            },
+            {
+              "id": "python.lang.security.audit.md5-used-as-password",
+              "shortDescription": { "text": "Weak hash used for password" },
+              "defaultConfiguration": { "level": "warning" },
+              "properties": { "tags": ["security", "CWE-327"] }
+            }
+          ]
+        }
+      },
+      "results": [
+        {
+          "ruleId": "python.lang.security.audit.formatted-sql-query.formatted-sql-query",
+          "level": "error",
+          "message": { "text": "Detected SQL statement built from user-controlled input." },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": { "uri": "src/payments/repository.py" },
+                "region": { "startLine": 142, "endLine": 144 }
+              }
+            }
+          ],
+          "partialFingerprints": { "primaryLocationLineHash": "d41d8cd98f00b204" }
+        },
+        {
+          "ruleId": "python.lang.security.audit.md5-used-as-password",
+          "level": "warning",
+          "message": { "text": "MD5 is used to hash a password." },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": { "uri": "src/users/legacy_hash.py" },
+                "region": { "startLine": 24 }
+              }
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

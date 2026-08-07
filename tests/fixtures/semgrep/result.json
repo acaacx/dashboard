@@ -1,0 +1,49 @@
+{
+  "version": "1.95.0",
+  "results": [
+    {
+      "check_id": "python.lang.security.audit.formatted-sql-query.formatted-sql-query",
+      "path": "src/payments/repository.py",
+      "start": { "line": 142, "col": 5, "offset": 4210 },
+      "end": { "line": 144, "col": 42, "offset": 4390 },
+      "extra": {
+        "message": "Detected SQL statement built from user-controlled input.",
+        "severity": "ERROR",
+        "fingerprint": "abc123stablefingerprint",
+        "lines": "        query = \"SELECT * FROM x WHERE id = \" + customer_id",
+        "fix": "Use a parameterised query.",
+        "metadata": {
+          "cwe": [
+            "CWE-89: Improper Neutralization of Special Elements used in an SQL Command"
+          ],
+          "owasp": ["A03:2021 - Injection"],
+          "confidence": "HIGH",
+          "impact": "HIGH",
+          "likelihood": "HIGH",
+          "category": "security",
+          "technology": ["python"],
+          "references": ["https://example.invalid/sqli"],
+          "shortlink": "https://sg.run/example"
+        }
+      }
+    },
+    {
+      "check_id": "python.lang.security.audit.md5-used-as-password",
+      "path": "src/users/legacy_hash.py",
+      "start": { "line": 24, "col": 5, "offset": 700 },
+      "end": { "line": 24, "col": 40, "offset": 735 },
+      "extra": {
+        "message": "MD5 is used to hash a password.",
+        "severity": "WARNING",
+        "metadata": {
+          "cwe": ["CWE-327: Use of a Broken or Risky Cryptographic Algorithm"],
+          "confidence": "MEDIUM",
+          "impact": "MEDIUM",
+          "category": "security"
+        }
+      }
+    }
+  ],
+  "errors": [],
+  "paths": { "scanned": ["src"] }
+}

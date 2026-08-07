@@ -1,0 +1,67 @@
+{
+  "$schema": "https://json.schemastore.org/sarif-2.1.0.json",
+  "version": "2.1.0",
+  "runs": [
+    {
+      "tool": {
+        "driver": {
+          "name": "Checkov",
+          "version": "3.2.334",
+          "informationUri": "https://checkov.io",
+          "rules": [
+            {
+              "id": "CKV_AZURE_59",
+              "name": "Ensure that Azure Storage Account does not allow public blob access",
+              "shortDescription": {
+                "text": "Ensure that Azure Storage Account does not allow public blob access"
+              },
+              "helpUri": "https://docs.example.invalid/checkov/ckv-azure-59",
+              "defaultConfiguration": { "level": "error" },
+              "properties": { "tags": ["terraform", "azure", "iac"] }
+            },
+            {
+              "id": "CKV_AZURE_3",
+              "name": "Ensure that the Storage Account enables secure transfer",
+              "shortDescription": {
+                "text": "Ensure that the Storage Account enables secure transfer"
+              },
+              "helpUri": "https://docs.example.invalid/checkov/ckv-azure-3",
+              "properties": { "tags": ["terraform", "azure", "iac"] }
+            }
+          ]
+        }
+      },
+      "results": [
+        {
+          "ruleId": "CKV_AZURE_59",
+          "level": "error",
+          "message": {
+            "text": "Ensure that Azure Storage Account does not allow public blob access"
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": { "uri": "azure/storage.tf" },
+                "region": { "startLine": 14, "endLine": 28 }
+              }
+            }
+          ]
+        },
+        {
+          "ruleId": "CKV_AZURE_3",
+          "message": {
+            "text": "Ensure that the Storage Account enables secure transfer"
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": { "uri": "azure/storage.tf" },
+                "region": { "startLine": 14, "endLine": 28 }
+              }
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

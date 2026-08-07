@@ -1,0 +1,53 @@
+{
+  "check_type": "terraform",
+  "results": {
+    "passed_checks": [
+      {
+        "check_id": "CKV_AZURE_1",
+        "check_name": "Ensure managed disks use customer-managed keys",
+        "check_result": { "result": "PASSED" },
+        "file_path": "/azure/storage.tf",
+        "file_line_range": [1, 12],
+        "resource": "azurerm_managed_disk.data"
+      }
+    ],
+    "failed_checks": [
+      {
+        "check_id": "CKV_AZURE_59",
+        "bc_check_id": "BC_AZURE_59",
+        "check_name": "Ensure that Azure Storage Account does not allow public blob access",
+        "check_result": { "result": "FAILED" },
+        "file_path": "/azure/storage.tf",
+        "file_abs_path": "/github/workspace/azure/storage.tf",
+        "repo_file_path": "/azure/storage.tf",
+        "file_line_range": [14, 28],
+        "resource": "azurerm_storage_account.assets",
+        "resource_address": "azurerm_storage_account.assets",
+        "check_class": "checkov.terraform.checks.resource.azure",
+        "severity": "HIGH",
+        "guideline": "https://docs.example.invalid/checkov/ckv-azure-59",
+        "code_block": [[14, "resource \"azurerm_storage_account\" \"assets\" {"]]
+      },
+      {
+        "check_id": "CKV_AZURE_3",
+        "bc_check_id": "BC_AZURE_3",
+        "check_name": "Ensure that the Storage Account enables secure transfer",
+        "check_result": { "result": "FAILED" },
+        "file_path": "/azure/storage.tf",
+        "file_line_range": [14, 28],
+        "resource": "azurerm_storage_account.assets",
+        "check_class": "checkov.terraform.checks.resource.azure",
+        "severity": null,
+        "guideline": "https://docs.example.invalid/checkov/ckv-azure-3"
+      }
+    ]
+  },
+  "summary": {
+    "passed": 1,
+    "failed": 2,
+    "skipped": 0,
+    "parsing_errors": 0,
+    "resource_count": 4,
+    "checkov_version": "3.2.334"
+  }
+}

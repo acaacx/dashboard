@@ -1,0 +1,88 @@
+{
+  "SchemaVersion": 2,
+  "ArtifactName": "registry.example.invalid/order-service:1.14.2",
+  "ArtifactType": "container_image",
+  "Results": [
+    {
+      "Target": "registry.example.invalid/order-service:1.14.2 (debian 12.5)",
+      "Class": "os-pkgs",
+      "Type": "debian",
+      "Vulnerabilities": [
+        {
+          "VulnerabilityID": "CVE-2026-5678",
+          "PkgName": "openssl",
+          "InstalledVersion": "3.0.11-1~deb12u2",
+          "FixedVersion": "3.0.13-1~deb12u1",
+          "Status": "fixed",
+          "Severity": "HIGH",
+          "Title": "openssl: use-after-free in certificate chain validation",
+          "Description": "A malformed certificate chain can trigger a use-after-free.",
+          "PrimaryURL": "https://avd.example.invalid/nvd/cve-2026-5678",
+          "CweIDs": ["CWE-416"],
+          "CVSS": { "nvd": { "V3Score": 7.5 } },
+          "References": ["https://avd.example.invalid/reference"],
+          "DataSource": { "ID": "debian", "Name": "Debian Security Tracker" }
+        }
+      ]
+    },
+    {
+      "Target": "app/package-lock.json",
+      "Class": "lang-pkgs",
+      "Type": "npm",
+      "Vulnerabilities": [
+        {
+          "VulnerabilityID": "CVE-2026-3456",
+          "PkgName": "lodash",
+          "PkgPath": "app/node_modules/lodash/package.json",
+          "InstalledVersion": "4.17.20",
+          "FixedVersion": "4.17.21",
+          "Severity": "MEDIUM",
+          "Title": "lodash: prototype pollution",
+          "CweIDs": ["CWE-1321"],
+          "PrimaryURL": "https://avd.example.invalid/nvd/cve-2026-3456"
+        }
+      ]
+    },
+    {
+      "Target": "Dockerfile",
+      "Class": "config",
+      "Type": "dockerfile",
+      "Misconfigurations": [
+        {
+          "Type": "Dockerfile Security Check",
+          "ID": "DS002",
+          "AVDID": "AVD-DS-0002",
+          "Title": "Image user should not be 'root'",
+          "Description": "Running containers as root increases blast radius.",
+          "Message": "Specify at least one USER command with a non-root user.",
+          "Resolution": "Add 'USER app' before the entrypoint.",
+          "Severity": "MEDIUM",
+          "PrimaryURL": "https://avd.example.invalid/misconfig/ds002",
+          "CauseMetadata": {
+            "Provider": "Dockerfile",
+            "Service": "general",
+            "StartLine": 1,
+            "EndLine": 1,
+            "Resource": "registry.example.invalid/order-service:1.14.2"
+          }
+        }
+      ]
+    },
+    {
+      "Target": "config/settings.yaml",
+      "Class": "secret",
+      "Type": "yaml",
+      "Secrets": [
+        {
+          "RuleID": "generic-api-key",
+          "Category": "GenericApiKey",
+          "Severity": "CRITICAL",
+          "Title": "Generic API key detected",
+          "StartLine": 12,
+          "EndLine": 12,
+          "Match": "api_key: REDACTED-TEST-PLACEHOLDER-0001"
+        }
+      ]
+    }
+  ]
+}

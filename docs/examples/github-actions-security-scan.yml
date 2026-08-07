@@ -1,0 +1,160 @@
+# Example scanner pipeline for a repository that reports to the DevSecOps
+# Dashboard.
+#
+# This file is documentation. It lives under docs/ rather than
+# .github/workflows/ so it is never executed by this repository — copy it into
+# the repository you actually want to scan.
+#
+# Required configuration in the scanned repository:
+#   vars.DEVSECOPS_DASHBOARD_URL       e.g. https://dashboard.internal.example
+#   secrets.DEVSECOPS_DASHBOARD_TOKEN  matches SECURITY_INGEST_TOKEN on the dashboard
+#
+# The token here is an example secret name only — no real token is needed to
+# read or adapt this file.
+
+name: Security Scan
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  schedule:
+    - cron: "0 3 * * *"
+
+permissions:
+  contents: read
+
+env:
+  DASHBOARD_URL: ${{ vars.DEVSECOPS_DASHBOARD_URL }}
+  DASHBOARD_TOKEN: ${{ secrets.DEVSECOPS_DASHBOARD_TOKEN }}
+
+jobs:
+  scan:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # Gitleaks needs history to scan past commits, not just the tip.
+          fetch-depth: 0
+
+      # ---------------------------------------------------------------- SAST
+      - name: Semgrep
+        # `continue-on-error` throughout: a scanner exits non-zero when it finds
+        # something, and a finding is exactly when the dashboard must be updated.
+        continue-on-error: true
+        run: |
+          pipx install semgrep
+          semgrep scan --config auto --json --output semgrep.json
+
+      - name: Report Semgrep
+        if: always()
+        run: ./report.sh SEMGREP semgrep.json
+
+      # ------------------------------------------------------------- SECRETS
+      - name: Gitleaks
+        continue-on-error: true
+        run: |
+          curl -sSL https://github.com/gitleaks/gitleaks/releases/latest/download/gitleaks_linux_x64.tar.gz \
+            | tar -xz gitleaks
+          ./gitleaks detect --report-format json --report-path gitleaks.json --exit-code 0
+
+      - name: Report Gitleaks
+        if: always()
+        run: ./report.sh GITLEAKS gitleaks.json
+
+      # ----------------------------------------------------------------- IaC
+      - name: Checkov
+        continue-on-error: true
+        run: |
+          pipx install checkov
+          checkov --directory . --output json --output-file-path . --soft-fail
+          mv results_json.json checkov.json
+
+      - name: Report Checkov
+        if: always()
+        run: ./report.sh CHECKOV checkov.json
+
+      # ------------------------------------------------- Dependencies/image
+      - name: Trivy (filesystem)
+        continue-on-error: true
+        uses: aquasecurity/trivy-action@master
+        with:
+          scan-type: fs
+          scan-ref: .
+          format: json
+          output: trivy.json
+          # Native JSON is preferred over SARIF: Trivy's SARIF drops PkgName,
+          # InstalledVersion and FixedVersion, which is most of what makes a
+          # dependency finding actionable.
+
+      - name: Report Trivy
+        if: always()
+        run: ./report.sh TRIVY trivy.json
+
+      # ------------------------------------------------------------ Evidence
+      - name: Upload scan artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: security-scan-results
+          path: |
+            semgrep.json
+            gitleaks.json
+            checkov.json
+            trivy.json
+          if-no-files-found: warn
+          retention-days: 30
+
+# ---------------------------------------------------------------------------
+# report.sh — wrap a scanner report in the ingestion envelope and POST it.
+# Commit this alongside the workflow, or inline it into each step.
+#
+#   #!/usr/bin/env bash
+#   set -euo pipefail
+#
+#   SCANNER="$1"
+#   REPORT="$2"
+#
+#   # A scanner that crashed before writing output is not a clean scan; say so.
+#   if [[ ! -s "$REPORT" ]]; then
+#     echo "::warning::$SCANNER produced no report at $REPORT; skipping upload"
+#     exit 0
+#   fi
+#
+#   jq -n \
+#     --arg scanner        "$SCANNER" \
+#     --arg repositoryName "$GITHUB_REPOSITORY" \
+#     --arg branch         "$GITHUB_REF_NAME" \
+#     --arg commitSha      "$GITHUB_SHA" \
+#     --arg workflowRunId  "$GITHUB_RUN_ID" \
+#     --arg workflowRunUrl "$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID" \
+#     --arg environment    "production" \
+#     --arg scannedAt      "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+#     --slurpfile results  "$REPORT" \
+#     '{
+#        scanner:        $scanner,
+#        format:         "json",
+#        repositoryName: $repositoryName,
+#        branch:         $branch,
+#        commitSha:      $commitSha,
+#        workflowRunId:  $workflowRunId,
+#        workflowRunUrl: $workflowRunUrl,
+#        environment:    $environment,
+#        scannedAt:      $scannedAt,
+#        results:        $results[0]
+#      }' > payload.json
+#
+#   curl --fail-with-body -sS -X POST "$DASHBOARD_URL/api/security/scans" \
+#     -H "Authorization: Bearer $DASHBOARD_TOKEN" \
+#     -H "Content-Type: application/json" \
+#     --data @payload.json
+#
+# Notes:
+#  - The dashboard accepts the scanner's raw output; no client-side conversion.
+#  - Findings this scan no longer reports are auto-resolved for that scanner and
+#    repository. For a partial or path-filtered scan, add
+#    "autoResolveMissing": false to the payload so absence is not read as a fix.
+#  - SARIF works equally well: emit .sarif, set "format": "sarif", and send it
+#    in the same `results` field.
+# ---------------------------------------------------------------------------

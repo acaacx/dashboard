@@ -1,0 +1,131 @@
+@import "tailwindcss";
+
+/**
+ * Ops Console — the dashboard's aesthetic direction.
+ *
+ * Dark-first telemetry console, not a marketing page: near-black layered
+ * surfaces, hairline borders, dense data, and colour reserved almost entirely
+ * for severity encoding. A single cyan accent marks interactive state and
+ * nothing else, so a coloured pixel in this UI always means something.
+ *
+ * Type pairing: IBM Plex Sans for prose and labels, IBM Plex Mono for anything
+ * a machine produced — CVEs, rule ids, file paths, fingerprints, counts.
+ */
+
+@theme {
+  /* Surfaces, lightest to darkest layer */
+  --color-canvas: #0a0c0f;
+  --color-surface: #111419;
+  --color-surface-raised: #161a21;
+  --color-surface-hover: #1b2029;
+  --color-line: #232935;
+  --color-line-strong: #2f3745;
+
+  /* Text */
+  --color-ink: #e7ebf1;
+  --color-ink-muted: #949fb1;
+  --color-ink-faint: #6b7688;
+
+  /* Single interactive accent */
+  --color-accent: #22d3ee;
+  --color-accent-dim: #0e7f92;
+
+  /* Severity scale — the only other colour allowed to carry meaning */
+  --color-critical: #ff4d6d;
+  --color-high: #ff8a4c;
+  --color-medium: #f2c14e;
+  --color-low: #4d9dff;
+  --color-info: #7c8798;
+  --color-unknown: #55606f;
+
+  /* Status */
+  --color-ok: #3ddc97;
+  --color-warn: #f2c14e;
+  --color-fail: #ff4d6d;
+
+  --font-sans: var(--font-plex-sans), ui-sans-serif, system-ui, sans-serif;
+  --font-mono: var(--font-plex-mono), ui-monospace, "SF Mono", monospace;
+
+  --radius-panel: 10px;
+}
+
+:root {
+  color-scheme: dark;
+}
+
+@layer base {
+  html {
+    background-color: var(--color-canvas);
+  }
+
+  body {
+    background-color: var(--color-canvas);
+    color: var(--color-ink);
+    font-family: var(--font-sans);
+    font-feature-settings: "cv05" 1;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  /* One consistent focus treatment, using the accent. */
+  :focus-visible {
+    outline: 2px solid var(--color-accent);
+    outline-offset: 2px;
+    border-radius: 3px;
+  }
+
+  ::selection {
+    background: var(--color-accent-dim);
+    color: var(--color-ink);
+  }
+
+  /* Console-style scrollbars so dense tables don't sprout chrome-coloured bars. */
+  * {
+    scrollbar-width: thin;
+    scrollbar-color: var(--color-line-strong) transparent;
+  }
+
+  ::-webkit-scrollbar {
+    width: 10px;
+    height: 10px;
+  }
+
+  ::-webkit-scrollbar-thumb {
+    background: var(--color-line-strong);
+    border-radius: 999px;
+    border: 3px solid transparent;
+    background-clip: content-box;
+  }
+
+  ::-webkit-scrollbar-track {
+    background: transparent;
+  }
+}
+
+@layer components {
+  /* Hairline grid used behind the page header — subtle depth, no gradient. */
+  .console-grid {
+    background-image:
+      linear-gradient(to right, var(--color-line) 1px, transparent 1px),
+      linear-gradient(to bottom, var(--color-line) 1px, transparent 1px);
+    background-size: 40px 40px;
+    mask-image: linear-gradient(to bottom, rgb(0 0 0 / 0.35), transparent 70%);
+  }
+
+  /* Tabular numerals everywhere a number is compared against another number. */
+  .numeric {
+    font-family: var(--font-mono);
+    font-variant-numeric: tabular-nums;
+    letter-spacing: -0.01em;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}

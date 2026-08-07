@@ -1,0 +1,71 @@
+{
+  "$schema": "https://json.schemastore.org/sarif-2.1.0.json",
+  "version": "2.1.0",
+  "runs": [
+    {
+      "tool": {
+        "driver": {
+          "name": "Trivy",
+          "version": "0.58.0",
+          "informationUri": "https://github.com/aquasecurity/trivy",
+          "rules": [
+            {
+              "id": "CVE-2026-5678",
+              "name": "OsPackageVulnerability",
+              "shortDescription": { "text": "openssl: use-after-free in chain validation" },
+              "fullDescription": { "text": "A malformed certificate chain can trigger a use-after-free." },
+              "helpUri": "https://avd.example.invalid/nvd/cve-2026-5678",
+              "help": { "text": "Upgrade openssl to 3.0.13-1~deb12u1." },
+              "defaultConfiguration": { "level": "error" },
+              "properties": {
+                "tags": ["vulnerability", "security", "HIGH", "os-pkgs"],
+                "security-severity": "7.5"
+              }
+            },
+            {
+              "id": "DS002",
+              "name": "Misconfiguration",
+              "shortDescription": { "text": "Image user should not be 'root'" },
+              "helpUri": "https://avd.example.invalid/misconfig/ds002",
+              "defaultConfiguration": { "level": "warning" },
+              "properties": {
+                "tags": ["misconfiguration", "security", "MEDIUM"],
+                "security-severity": "5.5"
+              }
+            }
+          ]
+        }
+      },
+      "results": [
+        {
+          "ruleId": "CVE-2026-5678",
+          "level": "error",
+          "message": {
+            "text": "Package: openssl\nInstalled Version: 3.0.11-1~deb12u2\nVulnerability CVE-2026-5678"
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": { "uri": "registry.example.invalid/order-service:1.14.2" },
+                "region": { "startLine": 1 }
+              }
+            }
+          ]
+        },
+        {
+          "ruleId": "DS002",
+          "level": "warning",
+          "message": { "text": "Specify at least one USER command with a non-root user." },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": { "uri": "Dockerfile" },
+                "region": { "startLine": 1 }
+              }
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

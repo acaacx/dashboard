@@ -1,0 +1,42 @@
+[
+  {
+    "Description": "Hardcoded AWS access key",
+    "StartLine": 27,
+    "EndLine": 27,
+    "StartColumn": 21,
+    "EndColumn": 61,
+    "Match": "aws_access_key_id = REDACTED-TEST-PLACEHOLDER-0001",
+    "Secret": "REDACTED-TEST-PLACEHOLDER-0001",
+    "File": "deploy/legacy/aws.cfg",
+    "SymlinkFile": "",
+    "Commit": "9f1c4a2e7b3d5086af17c2d9e4b6a8130fc52947",
+    "Entropy": 3.8219,
+    "Author": "Test Author",
+    "Email": "test@example.invalid",
+    "Date": "2026-07-14T09:12:33Z",
+    "Message": "chore: legacy deploy config",
+    "Tags": ["aws", "key"],
+    "RuleID": "aws-access-token",
+    "Fingerprint": "9f1c4a2e7b3d5086af17c2d9e4b6a8130fc52947:deploy/legacy/aws.cfg:aws-access-token:27"
+  },
+  {
+    "Description": "Hardcoded API token",
+    "StartLine": 9,
+    "EndLine": 9,
+    "StartColumn": 15,
+    "EndColumn": 55,
+    "Match": "API_TOKEN = REDACTED-TEST-PLACEHOLDER-0002",
+    "Secret": "REDACTED-TEST-PLACEHOLDER-0002",
+    "File": "src/payments/config.py",
+    "SymlinkFile": "",
+    "Commit": "9f1c4a2e7b3d5086af17c2d9e4b6a8130fc52947",
+    "Entropy": 4.1023,
+    "Author": "Test Author",
+    "Email": "test@example.invalid",
+    "Date": "2026-07-20T16:41:02Z",
+    "Message": "feat: payment config",
+    "Tags": ["generic", "token"],
+    "RuleID": "generic-api-key",
+    "Fingerprint": "9f1c4a2e7b3d5086af17c2d9e4b6a8130fc52947:src/payments/config.py:generic-api-key:9"
+  }
+]
