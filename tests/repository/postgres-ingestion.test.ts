@@ -134,7 +134,11 @@ if (!TEST_DATABASE_URL) {
 
       const page = await findings.findAll({ status: ["OPEN"] });
       const target = page.items[0];
-      await security.setFindingStatus(target.id, "ACCEPTED_RISK");
+      await security.setFindingStatus(
+        target.id,
+        "ACCEPTED_RISK",
+        "Accepted for the duration of the migration.",
+      );
 
       await ingestion.ingest({
         ...request,

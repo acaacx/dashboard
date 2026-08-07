@@ -81,6 +81,28 @@ export class PayloadTooLargeError extends SecurityDomainError {
   }
 }
 
+/**
+ * A manual status change the lifecycle does not allow.
+ *
+ * 409 rather than 400: the request is well-formed, it conflicts with the
+ * finding's current state. The message names the two statuses and nothing else
+ * — it never carries finding content.
+ */
+export class InvalidStatusTransitionError extends SecurityDomainError {
+  readonly code = "INVALID_STATUS_TRANSITION";
+  readonly httpStatus = 409;
+
+  constructor(from: string, to: string) {
+    super(`Cannot transition a finding from ${from} to ${to}.`);
+  }
+}
+
+/** A missing, blank or over-long justification. Never quotes what was sent. */
+export class InvalidStatusReasonError extends SecurityDomainError {
+  readonly code = "INVALID_STATUS_REASON";
+  readonly httpStatus = 400;
+}
+
 export function isSecurityDomainError(
   error: unknown,
 ): error is SecurityDomainError {

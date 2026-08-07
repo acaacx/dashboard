@@ -170,6 +170,10 @@ async function acceptOneRisk(security: SecurityService): Promise<void> {
     (finding) => finding.ruleId === "CKV_AZURE_112",
   );
   if (target) {
-    await security.setFindingStatus(target.id, "ACCEPTED_RISK");
+    await security.setFindingStatus(
+      target.id,
+      "ACCEPTED_RISK",
+      "Key vault purge protection is enforced by Azure Policy at the subscription level; the module flag is redundant here.",
+    );
   }
 }

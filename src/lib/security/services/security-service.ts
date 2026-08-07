@@ -17,7 +17,13 @@ import type {
   ScannerHealth,
   ScanRunQuery,
 } from "@/domain/security/scan-run";
-import { canTransition } from "../lifecycle";
+import {
+  InvalidStatusReasonError,
+  InvalidStatusTransitionError,
+} from "@/domain/security/errors";
+import { canTransition, isHumanDecided } from "../lifecycle";
+import { MAX_STATUS_REASON_LENGTH } from "../status-change";
+import { statusReasonSchema } from "../validation/schemas";
 import type {
   FilterOptions,
   SecurityFindingRepository,
@@ -293,25 +299,52 @@ export class SecurityService {
 
   /**
    * Apply a human decision to a finding (accept risk, mark false positive, …).
-   * Invalid transitions are rejected rather than silently applied.
+   *
+   * Invalid transitions are rejected rather than silently applied, and the three
+   * human-decided statuses require a justification: an accepted risk with no
+   * recorded reason is not auditable, which is the whole point of the status.
    */
   async setFindingStatus(
     id: string,
     status: FindingStatus,
+    reason: string | undefined,
     now: Date = new Date(),
   ): Promise<SecurityFinding | null> {
     const finding = await this.findings.findById(id);
     if (!finding) return null;
+    // A no-op transition must not become a way to rewrite an existing
+    // justification without a real state change.
     if (finding.status === status) return finding;
     if (!canTransition(finding.status, status)) {
-      throw new Error(
-        `Cannot transition finding from ${finding.status} to ${status}.`,
-      );
+      throw new InvalidStatusTransitionError(finding.status, status);
+    }
+
+    let statusReason: string | undefined;
+    if (isHumanDecided(status)) {
+      const parsed = statusReasonSchema.safeParse(reason ?? "");
+      if (!parsed.success) {
+        throw new InvalidStatusReasonError(
+          `A justification of 1 to ${MAX_STATUS_REASON_LENGTH} characters is required to set a finding to ${status}.`,
+        );
+      }
+      statusReason = parsed.data;
+    } else if (reason !== undefined) {
+      const parsed = statusReasonSchema.safeParse(reason);
+      if (!parsed.success) {
+        throw new InvalidStatusReasonError(
+          `A justification may be at most ${MAX_STATUS_REASON_LENGTH} characters.`,
+        );
+      }
+      statusReason = parsed.data;
     }
 
     return this.findings.update(id, {
       status,
       resolvedAt: status === "RESOLVED" ? now.toISOString() : undefined,
+      // Reopening without a reason clears the old one: a justification written
+      // for a status the finding no longer holds reads as a current decision.
+      statusReason,
+      statusChangedAt: now.toISOString(),
     });
   }
 }

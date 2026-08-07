@@ -7,6 +7,7 @@ import {
   SEVERITIES,
 } from "@/domain/security/enums";
 import { SCAN_RUN_STATUSES } from "@/domain/security/scan-run";
+import { MAX_STATUS_REASON_LENGTH } from "@/lib/security/status-change";
 
 /**
  * Schema validation for everything that crosses the HTTP boundary.
@@ -52,6 +53,19 @@ const isoTimestamp = z
     (value) => !Number.isNaN(Date.parse(value)),
     "must be an ISO 8601 timestamp",
   );
+
+/**
+ * Justification for a manual status change.
+ *
+ * Trimmed before length is measured, so 500 spaces is not a valid reason. The
+ * text is free-form: it is written by a person about their own system, and it
+ * is rendered as text, never as HTML.
+ */
+export const statusReasonSchema = z
+  .string()
+  .trim()
+  .min(1)
+  .max(MAX_STATUS_REASON_LENGTH);
 
 /**
  * Ingestion request.
