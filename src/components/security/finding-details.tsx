@@ -1,11 +1,21 @@
 "use client";
 
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 
-import { categoryLabel, scannerLabel } from "@/domain/security/enums";
+import {
+  categoryLabel,
+  scannerLabel,
+  statusLabel,
+  type FindingStatus,
+} from "@/domain/security/enums";
 import type { SecurityFinding } from "@/domain/security/finding";
 import { ScannerBadge, SeverityBadge, StatusBadge } from "@/components/ui/badge";
 import { formatDateTime } from "@/lib/format";
+import {
+  MAX_STATUS_REASON_LENGTH,
+  selectableTransitions,
+  type SetFindingStatusAction,
+} from "@/lib/security/status-change";
 
 /**
  * Finding detail drawer.
@@ -20,9 +30,14 @@ import { formatDateTime } from "@/lib/format";
 export function FindingDetails({
   finding,
   onClose,
+  onApplyStatus,
+  onStatusChanged,
 }: {
   finding: SecurityFinding;
   onClose: () => void;
+  /** Absent in read-only contexts; the decision form is then not rendered. */
+  onApplyStatus?: SetFindingStatusAction;
+  onStatusChanged?: (finding: SecurityFinding) => void;
 }) {
   const closeRef = useRef<HTMLButtonElement>(null);
 
@@ -176,6 +191,32 @@ export function FindingDetails({
             </Fields>
           </Section>
 
+          {(finding.statusReason || onApplyStatus) && (
+            <Section title="Decision">
+              {finding.statusReason && (
+                <div className="border-line bg-surface-raised mb-4 rounded border px-3 py-2.5">
+                  <p className="text-ink-muted text-sm leading-relaxed break-words whitespace-pre-wrap">
+                    {finding.statusReason}
+                  </p>
+                  {finding.statusChangedAt && (
+                    <p className="text-ink-faint mt-1.5 font-mono text-[10px]">
+                      {statusLabel(finding.status)} ·{" "}
+                      {formatDateTime(finding.statusChangedAt)}
+                    </p>
+                  )}
+                </div>
+              )}
+
+              {onApplyStatus && (
+                <DecisionForm
+                  finding={finding}
+                  onApplyStatus={onApplyStatus}
+                  onStatusChanged={onStatusChanged}
+                />
+              )}
+            </Section>
+          )}
+
           <Section title="Remediation">
             {finding.remediation ? (
               <p className="text-ink-muted text-sm leading-relaxed break-words whitespace-pre-wrap">
@@ -222,6 +263,116 @@ export function FindingDetails({
         </div>
       </aside>
     </div>
+  );
+}
+
+/**
+ * Manual status change.
+ *
+ * The option list comes from `selectableTransitions`, which withholds manual
+ * RESOLVED. That is UI policy, and the Server Action enforces it again — this
+ * select is not a security boundary.
+ *
+ * `statusReason` is free text a person wrote. It is rendered as JSX text like
+ * every other string in this drawer; there is no `dangerouslySetInnerHTML`
+ * anywhere in this codebase.
+ */
+function DecisionForm({
+  finding,
+  onApplyStatus,
+  onStatusChanged,
+}: {
+  finding: SecurityFinding;
+  onApplyStatus: SetFindingStatusAction;
+  onStatusChanged?: (finding: SecurityFinding) => void;
+}) {
+  const targets = selectableTransitions(finding.status);
+  const [target, setTarget] = useState<FindingStatus | "">("");
+  const [reason, setReason] = useState("");
+  const [pending, setPending] = useState(false);
+  const [error, setError] = useState<string | undefined>();
+
+  // Defensive: every current status yields at least one target today. This
+  // guards a future edit to ALLOWED_MANUAL_TRANSITIONS.
+  if (targets.length === 0) return null;
+
+  const submit = async (event: React.FormEvent) => {
+    event.preventDefault();
+    if (!target || pending) return;
+
+    setPending(true);
+    setError(undefined);
+
+    const result = await onApplyStatus(
+      finding.id,
+      target,
+      reason.trim() === "" ? undefined : reason,
+    );
+
+    setPending(false);
+
+    if (!result.ok) {
+      setError(result.message);
+      return;
+    }
+
+    setReason("");
+    setTarget("");
+    onStatusChanged?.(result.finding);
+  };
+
+  return (
+    <form onSubmit={submit} className="space-y-2.5">
+      <label className="block">
+        <span className="text-ink-faint mb-1 block font-mono text-[10px] tracking-[0.14em] uppercase">
+          Change status to
+        </span>
+        <select
+          value={target}
+          disabled={pending}
+          onChange={(event) =>
+            setTarget(event.target.value as FindingStatus | "")
+          }
+          className="border-line bg-surface-raised text-ink focus:border-accent/50 w-full rounded border px-2 py-1.5 font-mono text-[11px] outline-none disabled:opacity-50"
+        >
+          <option value="">Select a status…</option>
+          {targets.map((status) => (
+            <option key={status} value={status}>
+              {statusLabel(status)}
+            </option>
+          ))}
+        </select>
+      </label>
+
+      <label className="block">
+        <span className="text-ink-faint mb-1 block font-mono text-[10px] tracking-[0.14em] uppercase">
+          Reason
+        </span>
+        <textarea
+          value={reason}
+          rows={3}
+          maxLength={MAX_STATUS_REASON_LENGTH}
+          disabled={pending}
+          onChange={(event) => setReason(event.target.value)}
+          placeholder="Why is this the right call? Required unless reopening."
+          className="border-line bg-surface-raised text-ink placeholder:text-ink-faint focus:border-accent/50 w-full resize-y rounded border px-2 py-1.5 text-sm outline-none disabled:opacity-50"
+        />
+      </label>
+
+      {error && (
+        <p role="alert" className="text-fail text-xs">
+          {error}
+        </p>
+      )}
+
+      <button
+        type="submit"
+        disabled={pending || target === ""}
+        className="border-line text-ink-muted hover:border-line-strong hover:text-ink rounded border px-2.5 py-1 font-mono text-[11px] transition-colors disabled:cursor-not-allowed disabled:opacity-40"
+      >
+        {pending ? "Applying…" : "Apply"}
+      </button>
+    </form>
   );
 }
 
