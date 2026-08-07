@@ -526,7 +526,7 @@ imports it.
 npm test
 ```
 
-248 tests without a database; 299 with one.
+272 tests without a database; 323 with one.
 
 Covering adapters (all four, native JSON and SARIF), the SARIF parser, severity
 and category normalization, fingerprint determinism, deduplication, the finding
