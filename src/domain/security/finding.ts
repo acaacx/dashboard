@@ -79,6 +79,16 @@ export interface SecurityFinding {
   resolvedAt?: string;
 
   /**
+   * Why a human set the current status. Present only when a person decided:
+   * scanners never supply it and `reconcileFinding` refuses to accept one from
+   * an adapter. Free text, untrusted, rendered as text and never as HTML.
+   */
+  statusReason?: string;
+
+  /** ISO-8601 UTC instant of the last manual status change. */
+  statusChangedAt?: string;
+
+  /**
    * Remediation text as reported by the scanner. Never synthesised: if the
    * scanner did not supply guidance this stays undefined and the UI says so.
    */

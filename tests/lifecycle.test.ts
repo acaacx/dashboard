@@ -218,3 +218,56 @@ describe("isHumanDecided", () => {
     expect(isHumanDecided("RESOLVED")).toBe(false);
   });
 });
+
+describe("reconcileFinding and human decisions", () => {
+  it("preserves a recorded justification when a scan sees the finding again", () => {
+    const existing = finding({
+      status: "ACCEPTED_RISK",
+      statusReason: "Compensating control in the WAF, reviewed 2026-08-01.",
+      statusChangedAt: "2026-08-01T09:00:00.000Z",
+    });
+
+    const { finding: merged, transition } = reconcileFinding(
+      existing,
+      finding({ lastDetectedAt: "2026-08-12T00:00:00.000Z" }),
+    );
+
+    expect(transition).toBe("EXISTING");
+    expect(merged.status).toBe("ACCEPTED_RISK");
+    expect(merged.statusReason).toBe(
+      "Compensating control in the WAF, reviewed 2026-08-01.",
+    );
+    expect(merged.statusChangedAt).toBe("2026-08-01T09:00:00.000Z");
+  });
+
+  it("preserves the justification when a resolved finding is reopened by a scan", () => {
+    const existing = finding({
+      status: "RESOLVED",
+      resolvedAt: "2026-08-05T00:00:00.000Z",
+      statusReason: "Marked false positive in July, later reopened.",
+      statusChangedAt: "2026-07-02T09:00:00.000Z",
+    });
+
+    const { finding: merged, transition } = reconcileFinding(
+      existing,
+      finding({ lastDetectedAt: "2026-08-12T00:00:00.000Z" }),
+    );
+
+    expect(transition).toBe("REOPENED");
+    expect(merged.status).toBe("OPEN");
+    expect(merged.statusReason).toBe(
+      "Marked false positive in July, later reopened.",
+    );
+    expect(merged.statusChangedAt).toBe("2026-07-02T09:00:00.000Z");
+  });
+
+  it("does not invent a justification for a finding nobody ruled on", () => {
+    const { finding: merged } = reconcileFinding(
+      undefined,
+      finding({ statusReason: "scanner supplied this", statusChangedAt: "x" }),
+    );
+
+    expect(merged.statusReason).toBeUndefined();
+    expect(merged.statusChangedAt).toBeUndefined();
+  });
+});
