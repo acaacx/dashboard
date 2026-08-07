@@ -178,6 +178,34 @@ Auto-resolution is **scoped**: a scan only resolves findings from the same
 scanner, repository and environment. A Semgrep run says nothing about Trivy
 findings. Pass `autoResolveMissing: false` for partial or path-filtered scans.
 
+### Manual decisions
+
+The finding detail drawer offers `ACCEPTED_RISK`, `FALSE_POSITIVE`, `SUPPRESSED`
+and reopening to `OPEN`. All three human-decided statuses **require a
+justification**, stored in `statusReason` alongside `statusChangedAt`: an
+accepted risk nobody explained is not auditable, which is the only reason the
+status is worth having. The reason is trimmed and capped at 500 characters.
+
+Reopening to `OPEN` takes an optional reason, and **clears the old one when none
+is given** — a justification written for a status the finding no longer holds
+reads as a current decision. A change to the status a finding already has is a
+no-op, so that path cannot be used to rewrite a justification without a real
+transition.
+
+`reconcileFinding` restores both fields from the stored finding, so a later scan
+cannot erase a justification, and clears whatever an adapter supplied on the NEW
+path, so a scanner cannot plant one.
+
+Manual `RESOLVED` is **deliberately not offered**. `RESOLVED` means a scan
+stopped seeing the finding; letting a person assert it by hand makes
+mean-time-to-remediate a number anyone can improve without fixing anything.
+`canTransition` still permits `OPEN -> RESOLVED` for the ingestion path — the
+restriction is UI policy, enforced again in the Server Action so the `<select>`
+is not the only thing standing in the way.
+
+No actor is recorded. There is no user authentication to derive one from, and a
+stored `changedBy` would be fabricated attribution.
+
 ---
 
 ## Deduplication
@@ -447,6 +475,24 @@ Notes on the SQL:
 - filter values are always bound parameters; nothing is interpolated
 - `TIMESTAMPTZ` throughout, converted to ISO-8601 UTC at the repository boundary
 
+Migration `002_finding_status_reason.sql` adds `status_reason TEXT` and
+`status_changed_at TIMESTAMPTZ`, both nullable — every finding that predates it
+has no human decision attached. Neither column is indexed, because neither is
+filtered or sorted on.
+
+### Changing a finding's status
+
+The write path is a **Next.js Server Action**, not an API route. There is no user
+authentication, and the only credential this app owns —
+`SECURITY_INGEST_TOKEN` — belongs to CI and cannot be shipped to a browser. A
+public endpoint able to mark a `CRITICAL` finding as a false positive is a direct
+way to hide a real vulnerability, so no such endpoint exists.
+
+The action returns a discriminated result rather than throwing: only
+`SecurityDomainError` messages, which are safe by construction, reach the
+browser. Anything else becomes a fixed `INTERNAL_ERROR` message, so a database
+failure cannot deliver an internal hostname to the page.
+
 ### Connection retry
 
 Transient database failures are retried with exponential backoff and **full
@@ -526,14 +572,14 @@ imports it.
 npm test
 ```
 
-272 tests without a database; 323 with one.
+297 tests without a database; 349 with one.
 
 Covering adapters (all four, native JSON and SARIF), the SARIF parser, severity
 and category normalization, fingerprint determinism, deduplication, the finding
 lifecycle, statistics and trend calculation, scanner health, the SQL builders,
 and the findings table's rendering, filters and detail drawer.
 
-**The repository contract suite is the important one.** The same 45 assertions
+**The repository contract suite is the important one.** The same 46 assertions
 run against both the in-memory and the PostgreSQL store, covering the awkward
 cases — NULL handling in filters, LIKE-metacharacter escaping, page clamping,
 tiebreak ordering, MTTR being undefined rather than zero. If the two drivers ever
@@ -577,8 +623,9 @@ interactive state — so a coloured pixel always means something. Motion respect
   sustained outage means every request pays the full retry budget before failing.
 - GitHub and Azure providers are declared and stubbed, not implemented; pages
   that would use them say so rather than showing placeholder data.
-- Manual status changes (accept risk, false positive) exist in the service and
-  are tested, but are not yet exposed as a UI control.
+- Anyone who can reach the dashboard can change a finding's status. There is no
+  user authentication, so decisions are recorded with a justification but no
+  author.
 - Line-number-based fingerprints churn on unrelated edits where a scanner
   provides no stable id.
 - Scan ingestion is authenticated but not rate-limited.
