@@ -46,10 +46,11 @@ const COLUMNS = `
   cve, cwe, rule_id,
   resource, azure_resource_id, subscription_id, resource_group,
   status, first_detected_at, last_detected_at, resolved_at,
+  status_reason, status_changed_at,
   remediation, source_url, metadata
 `;
 
-const COLUMN_COUNT = 33;
+const COLUMN_COUNT = 35;
 
 interface FindingRow {
   fingerprint: string;
@@ -82,6 +83,8 @@ interface FindingRow {
   first_detected_at: Date;
   last_detected_at: Date;
   resolved_at: Date | null;
+  status_reason: string | null;
+  status_changed_at: Date | null;
   remediation: string | null;
   source_url: string | null;
   metadata: Record<string, unknown> | null;
@@ -127,6 +130,8 @@ function toFinding(row: FindingRow): SecurityFinding {
     firstDetectedAt: row.first_detected_at.toISOString(),
     lastDetectedAt: row.last_detected_at.toISOString(),
     resolvedAt: iso(row.resolved_at),
+    statusReason: undef(row.status_reason),
+    statusChangedAt: iso(row.status_changed_at),
     remediation: undef(row.remediation),
     sourceUrl: undef(row.source_url),
     metadata: row.metadata ?? undefined,
@@ -165,6 +170,8 @@ function toParams(finding: SecurityFinding): unknown[] {
     finding.firstDetectedAt,
     finding.lastDetectedAt,
     finding.resolvedAt ?? null,
+    finding.statusReason ?? null,
+    finding.statusChangedAt ?? null,
     finding.remediation ?? null,
     finding.sourceUrl ?? null,
     finding.metadata ? JSON.stringify(finding.metadata) : null,
@@ -172,8 +179,8 @@ function toParams(finding: SecurityFinding): unknown[] {
 }
 
 /**
- * Postgres caps a statement at 65535 bound parameters. At 33 columns per row
- * that is ~1985 rows; chunk well below it so a large Trivy image report cannot
+ * Postgres caps a statement at 65535 bound parameters. At 35 columns per row
+ * that is ~1872 rows; chunk well below it so a large Trivy image report cannot
  * fail on batch size alone.
  */
 const MAX_ROWS_PER_INSERT = 500;
@@ -383,6 +390,8 @@ export class PostgresSecurityFindingRepository
              first_detected_at = EXCLUDED.first_detected_at,
              last_detected_at = EXCLUDED.last_detected_at,
              resolved_at = EXCLUDED.resolved_at,
+             status_reason = EXCLUDED.status_reason,
+             status_changed_at = EXCLUDED.status_changed_at,
              remediation = EXCLUDED.remediation,
              source_url = EXCLUDED.source_url,
              metadata = EXCLUDED.metadata`,

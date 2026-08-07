@@ -1,4 +1,4 @@
-import { readFileSync } from "node:fs";
+import { readdirSync, readFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -16,17 +16,25 @@ import { Pool } from "pg";
 export const TEST_DATABASE_URL =
   process.env.TEST_DATABASE_URL?.trim() || undefined;
 
-const MIGRATION_PATH = path.join(
+const MIGRATION_DIR = path.join(
   path.dirname(fileURLToPath(import.meta.url)),
   "..",
   "..",
   "db",
   "migrations",
-  "001_init.sql",
 );
 
+/**
+ * Every migration, in filename order — the same order `npm run db:migrate`
+ * applies them. Reading the directory rather than naming one file means a new
+ * migration reaches the test schemas without editing this helper.
+ */
 export function migrationSql(): string {
-  return readFileSync(MIGRATION_PATH, "utf8");
+  return readdirSync(MIGRATION_DIR)
+    .filter((name) => name.endsWith(".sql"))
+    .sort()
+    .map((name) => readFileSync(path.join(MIGRATION_DIR, name), "utf8"))
+    .join("\n");
 }
 
 /**

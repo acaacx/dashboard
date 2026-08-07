@@ -120,6 +120,8 @@ export function runSecurityFindingRepositoryContract(
         resolvedAt: "2026-08-09T00:00:00.000Z",
         status: "RESOLVED",
         metadata: { owasp: ["A03"], nested: { a: 1 }, flag: true },
+        statusReason: "Accepted while the vendor patch is in flight.",
+        statusChangedAt: "2026-08-08T11:30:00.000Z",
       });
 
       await repository.save(rich);
@@ -132,6 +134,8 @@ export function runSecurityFindingRepositoryContract(
       expect(stored?.cve).toBeUndefined();
       expect(stored?.resolvedAt).toBeUndefined();
       expect(stored?.metadata).toBeUndefined();
+      expect(stored?.statusReason).toBeUndefined();
+      expect(stored?.statusChangedAt).toBeUndefined();
     });
 
     it("finds by id and by fingerprint, and returns null when absent", async () => {
@@ -334,6 +338,38 @@ export function runSecurityFindingRepositoryContract(
       expect((await repository.findByFingerprint("a"))?.status).toBe(
         "ACCEPTED_RISK",
       );
+    });
+
+    it("round-trips a justification through update, and clears it", async () => {
+      const target = await repository.findByFingerprint("a");
+
+      const accepted = await repository.update(target!.id, {
+        status: "ACCEPTED_RISK",
+        statusReason: "Compensating control documented in RISK-88.",
+        statusChangedAt: "2026-08-11T08:00:00.000Z",
+      });
+      expect(accepted?.statusReason).toBe(
+        "Compensating control documented in RISK-88.",
+      );
+      expect(accepted?.statusChangedAt).toBe("2026-08-11T08:00:00.000Z");
+
+      const reloaded = await repository.findByFingerprint("a");
+      expect(reloaded?.statusReason).toBe(
+        "Compensating control documented in RISK-88.",
+      );
+      expect(reloaded?.statusChangedAt).toBe("2026-08-11T08:00:00.000Z");
+
+      const reopened = await repository.update(target!.id, {
+        status: "OPEN",
+        statusReason: undefined,
+        statusChangedAt: "2026-08-12T08:00:00.000Z",
+      });
+      // Cleared, not stored as an empty string — the same NULL-versus-empty
+      // distinction the rest of this suite guards.
+      expect(reopened?.statusReason).toBeUndefined();
+      expect(
+        (await repository.findByFingerprint("a"))?.statusReason,
+      ).toBeUndefined();
     });
 
     it("refuses to change identity through update", async () => {
