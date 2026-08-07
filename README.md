@@ -21,7 +21,8 @@ with clearly-labelled mock scan results so every page has data on first run.
 | `npm run build` | Production build |
 | `npm run lint` | ESLint |
 | `npm run typecheck` | `next typegen` + `tsc --noEmit` |
-| `npm test` | Vitest (unit + component) |
+| `npm test` | Vitest (unit + component; Postgres tests skip without a DB) |
+| `npm run db:migrate` | Apply SQL migrations (requires `DATABASE_URL`) |
 
 ---
 
@@ -71,18 +72,22 @@ src/
     adapters/                 semgrep, trivy, checkov, gitleaks + registry
     parsers/sarif-parser.ts   generic SARIF 2.1.0 reader
     normalization/            severity.ts, categories.ts, fingerprint.ts
-    repository/               interface + in-memory implementations
+    repository/               interface, in-memory + PostgreSQL implementations
+      postgres/sql-filters.ts pure SQL builders (unit-tested without a DB)
     services/                 security-service.ts, scan-ingestion-service.ts
     validation/schemas.ts     Zod schemas for the HTTP boundary
     mock/                     MOCK payloads + seeder (dev only)
     lifecycle.ts              NEW / EXISTING / REOPENED / RESOLVED
     observability.ts          lightweight event seam
     container.ts              composition root
+  lib/db/pool.ts              PostgreSQL connection pool
   providers/platform.ts       GitHub | Azure | Security provider seam
   app/api/security/           REST endpoints
   app/dashboard/              Overview, Security, Applications, Pipelines
   components/security/        charts, table, drawer, scanner status
-tests/                        unit + component tests, fixtures/
+db/migrations/                forward-only SQL migrations
+scripts/migrate.mjs           migration runner
+tests/                        unit + component + repository-contract tests
 ```
 
 ---
@@ -378,32 +383,82 @@ filters and the table automatically.
 
 ---
 
-## Storage, and future PostgreSQL
+## Storage
 
-Today: `InMemorySecurityFindingRepository` and `InMemoryScanRunRepository`.
-Deliberately — there is no database to run, no migrations to maintain, and the
-in-memory implementation exercises the full `SecurityFindingRepository`
-interface, so a SQL implementation has a contract to satisfy rather than a shape
-to invent.
+Two interchangeable implementations of `SecurityFindingRepository` and
+`ScanRunRepository`. Both are verified against the **same contract test suite**
+(`tests/repository/repository-contract.ts`, 45 assertions), which is what makes
+"persistence is swappable" a fact rather than a hope.
 
-**Stated limitations:** state is per-process and lost on restart, and in a
-multi-instance deployment each instance would hold a different set.
+| Driver | When it is used | Trade-off |
+|---|---|---|
+| `memory` | default with no `DATABASE_URL` | zero setup; state is per-process and lost on restart |
+| `postgres` | whenever `DATABASE_URL` is set | durable, multi-instance safe, aggregates computed in SQL |
 
-Migration path — implement `SecurityFindingRepository` against these tables and
-swap it in `container.ts`:
+Selection lives in one place (`src/lib/security/container.ts`):
 
-| Table | Key columns |
+```
+SECURITY_STORAGE=postgres|memory   explicit override
+DATABASE_URL set                   -> postgres
+neither                            -> memory
+```
+
+Forgetting `DATABASE_URL` degrades to memory rather than crashing; setting it is
+all it takes to get durable storage.
+
+### Running with PostgreSQL
+
+```bash
+docker run -d --name dashboard-pg \
+  -e POSTGRES_PASSWORD=postgres -e POSTGRES_DB=dashboard \
+  -p 5432:5432 postgres:17-alpine
+
+export DATABASE_URL=postgres://postgres:postgres@localhost:5432/dashboard
+npm run db:migrate
+npm run dev
+```
+
+`npm run db:migrate` applies every file in `db/migrations/` once, in filename
+order, each inside a transaction, recording applied versions in
+`schema_migrations`. Forward-only and deliberately tiny: no ORM, no codegen, no
+rollback machinery to misunderstand.
+
+### Schema
+
+| Table | Purpose |
 |---|---|
-| `security_findings` | `fingerprint` UNIQUE, `id`, scanner, category, severity, status, `first_detected_at`, `last_detected_at`, `resolved_at`, repository/application/environment ids, `metadata jsonb` |
-| `scan_runs` | `id`, scanner, repository, branch, commit, status, timings, per-severity counts |
-| `scanner_sources` | registered scanner + credentials/config per repository |
-| `repositories`, `applications`, `environments` | inventory projections, when inventory is connected |
+| `security_findings` | one row per normalized finding, keyed by `fingerprint` |
+| `scan_runs` | one row per scanner execution; scanner health is derived from these |
+| `schema_migrations` | applied migration versions |
 
-`fingerprint` is the natural key — a `UNIQUE` constraint plus
-`INSERT … ON CONFLICT (fingerprint) DO UPDATE` gives the same dedup semantics
-transactionally. Index `(status, severity)`, `(repository_name, status)` and
-`(scanner, last_detected_at)` to match the query patterns the repository
-interface already expresses.
+`fingerprint` is the **primary key**, so
+`INSERT … ON CONFLICT (fingerprint) DO UPDATE` gives the deduplication semantics
+transactionally and across processes — the same rule the in-memory store applies
+with a `Map`. Indexes cover `(status, severity)`, `(repository_name, status)`,
+`(scanner, last_detected_at)` and the ingestion resolution scope.
+
+Notes on the SQL:
+
+- aggregates (statistics, trend, repository summaries) run **in the database**,
+  not by loading rows into Node, so they stay index-bound as data grows
+- trend day boundaries are computed in JavaScript and passed as a
+  `timestamptz[]`, so both drivers bucket by exactly the same UTC midnights
+- search escapes LIKE metacharacters, so a search for `100%` is literal text
+- filter values are always bound parameters; nothing is interpolated
+- `TIMESTAMPTZ` throughout, converted to ISO-8601 UTC at the repository boundary
+
+### Seeding behaviour with a database
+
+Mock seeding runs only when the store is **empty**. On a durable database a
+restart therefore does not pile up duplicate scan runs, and if data is already
+present the UI stops labelling it as mock — because it may be real.
+
+### Not yet implemented
+
+`scanner_sources`, `repositories`, `applications` and `environments` are named in
+the architecture but not created: the first has no configuration to hold yet, and
+the last three are inventory projections that belong to whatever system supplies
+the inventory. Adding them would be schema for schema's sake.
 
 ---
 
@@ -425,6 +480,10 @@ imports it.
 |---|---|---|
 | `SECURITY_INGEST_TOKEN` | unset | Bearer token for `POST /api/security/scans`. Required in production. |
 | `SECURITY_DATA_SOURCE` | `mock` | `mock` seeds demo data, `live` starts empty. |
+| `DATABASE_URL` | unset | PostgreSQL connection string. Setting it switches storage to Postgres. |
+| `SECURITY_STORAGE` | auto | Force `postgres` or `memory`, overriding the `DATABASE_URL` default. |
+| `DATABASE_POOL_MAX` | `10` | Maximum pooled connections. |
+| `TEST_DATABASE_URL` | unset | Test-only. When set, the Postgres test suites run against it. **Wiped between tests.** |
 
 ---
 
@@ -434,10 +493,33 @@ imports it.
 npm test
 ```
 
-165+ tests covering adapters (all four, native JSON and SARIF), the SARIF parser,
-severity and category normalization, fingerprint determinism, deduplication, the
-finding lifecycle, statistics and trend calculation, scanner health, and the
-findings table's rendering, filters and detail drawer.
+248 tests without a database; 299 with one.
+
+Covering adapters (all four, native JSON and SARIF), the SARIF parser, severity
+and category normalization, fingerprint determinism, deduplication, the finding
+lifecycle, statistics and trend calculation, scanner health, the SQL builders,
+and the findings table's rendering, filters and detail drawer.
+
+**The repository contract suite is the important one.** The same 45 assertions
+run against both the in-memory and the PostgreSQL store, covering the awkward
+cases — NULL handling in filters, LIKE-metacharacter escaping, page clamping,
+tiebreak ordering, MTTR being undefined rather than zero. If the two drivers ever
+diverge, that suite fails.
+
+To include the Postgres suites:
+
+```bash
+docker run -d --name dashboard-test-pg \
+  -e POSTGRES_PASSWORD=postgres -e POSTGRES_DB=dashboard_test \
+  -p 5433:5432 postgres:17-alpine
+
+export TEST_DATABASE_URL=postgres://postgres:postgres@localhost:5433/dashboard_test
+npm test
+```
+
+Each Postgres test file owns a dedicated schema, so they stay isolated while
+running in parallel. Without `TEST_DATABASE_URL` they skip and the rest of the
+suite runs normally.
 
 Fixtures in `tests/fixtures/` are sanitized and contain placeholder credentials
 only. Two tests exist specifically to prove that Gitleaks and Trivy secret
@@ -457,7 +539,9 @@ interactive state — so a coloured pixel always means something. Motion respect
 
 ## Known limitations
 
-- In-memory storage (see above).
+- In-memory storage is still the default; Postgres is opt-in via `DATABASE_URL`.
+- No connection retry or circuit breaker: if Postgres is down, pages error rather
+  than degrading.
 - GitHub and Azure providers are declared and stubbed, not implemented; pages
   that would use them say so rather than showing placeholder data.
 - Manual status changes (accept risk, false positive) exist in the service and

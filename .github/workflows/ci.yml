@@ -15,6 +15,26 @@ jobs:
     name: Lint · Typecheck · Test · Build
     runs-on: ubuntu-latest
 
+    # A real PostgreSQL so the repository contract suite runs against both
+    # drivers. Without it the Postgres tests skip and a SQL regression could
+    # merge unnoticed.
+    services:
+      postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: dashboard_test
+        ports:
+          - 5433:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
+    env:
+      TEST_DATABASE_URL: postgres://postgres:postgres@localhost:5433/dashboard_test
+
     steps:
       - uses: actions/checkout@v4
 
@@ -32,6 +52,11 @@ jobs:
       # Runs `next typegen` first so generated route types exist for tsc.
       - name: Typecheck
         run: npm run typecheck
+
+      - name: Apply migrations
+        run: npm run db:migrate
+        env:
+          DATABASE_URL: ${{ env.TEST_DATABASE_URL }}
 
       - name: Test
         run: npm test

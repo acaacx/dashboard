@@ -4,6 +4,7 @@ import {
   NoopAssetCorrelationService,
   type AssetCorrelationService,
 } from "@/domain/security/inventory";
+import { isPostgresConfigured } from "@/lib/db/pool";
 import { DevSecOpsPlatform } from "@/providers/platform";
 import {
   createDefaultAdapterRegistry,
@@ -11,6 +12,8 @@ import {
 } from "./adapters";
 import { InMemorySecurityFindingRepository } from "./repository/memory-security-finding-repository";
 import { InMemoryScanRunRepository } from "./repository/scan-run-repository";
+import { PostgresSecurityFindingRepository } from "./repository/postgres-security-finding-repository";
+import { PostgresScanRunRepository } from "./repository/postgres-scan-run-repository";
 import type { SecurityFindingRepository } from "./repository/security-finding-repository";
 import type { ScanRunRepository } from "./repository/scan-run-repository";
 import { ScanIngestionService } from "./services/scan-ingestion-service";
@@ -40,6 +43,8 @@ export interface SecurityContainer {
   platform: DevSecOpsPlatform;
   /** True when the store was seeded with fabricated data. Surfaced in the UI. */
   usingMockData: boolean;
+  /** Which persistence implementation is active. */
+  storage: StorageDriver;
 }
 
 /**
@@ -48,13 +53,43 @@ export interface SecurityContainer {
  */
 export type SecurityDataSource = "mock" | "live";
 
+/**
+ * `postgres` persists across restarts and across instances. `memory` is the
+ * zero-setup development default.
+ */
+export type StorageDriver = "memory" | "postgres";
+
 export function configuredDataSource(): SecurityDataSource {
   return process.env.SECURITY_DATA_SOURCE === "live" ? "live" : "mock";
 }
 
+/**
+ * Resolve the storage driver.
+ *
+ * Explicit SECURITY_STORAGE wins. Otherwise Postgres is used whenever
+ * DATABASE_URL is present, so setting the URL is all it takes to get durable
+ * storage — and forgetting it degrades to memory rather than crashing.
+ */
+export function configuredStorage(): StorageDriver {
+  const explicit = process.env.SECURITY_STORAGE?.trim().toLowerCase();
+  if (explicit === "postgres") return "postgres";
+  if (explicit === "memory") return "memory";
+  return isPostgresConfigured() ? "postgres" : "memory";
+}
+
 async function buildContainer(): Promise<SecurityContainer> {
-  const findingRepository = new InMemorySecurityFindingRepository();
-  const scanRunRepository = new InMemoryScanRunRepository();
+  const storage = configuredStorage();
+
+  const findingRepository: SecurityFindingRepository =
+    storage === "postgres"
+      ? new PostgresSecurityFindingRepository()
+      : new InMemorySecurityFindingRepository();
+
+  const scanRunRepository: ScanRunRepository =
+    storage === "postgres"
+      ? new PostgresScanRunRepository()
+      : new InMemoryScanRunRepository();
+
   const adapterRegistry = createDefaultAdapterRegistry();
 
   // Replace with `new InventoryAssetCorrelationService(provider)` once an
@@ -74,9 +109,17 @@ async function buildContainer(): Promise<SecurityContainer> {
     correlationService,
   );
 
-  const usingMockData = configuredDataSource() === "mock";
+  let usingMockData = configuredDataSource() === "mock";
   if (usingMockData) {
-    await seedMockData(ingestionService, securityService);
+    // With a durable store, seeding on every boot would pile up scan runs and
+    // make scanner health meaningless. Seed only into an empty database.
+    const existing = await findingRepository.count();
+    if (existing === 0) {
+      await seedMockData(ingestionService, securityService);
+    } else if (storage === "postgres") {
+      // Data is already present; it may be real. Do not claim it is mock.
+      usingMockData = false;
+    }
   }
 
   // GitHub and Azure stay unconfigured until real credentials exist; the
@@ -92,6 +135,7 @@ async function buildContainer(): Promise<SecurityContainer> {
     ingestionService,
     platform,
     usingMockData,
+    storage,
   };
 }
 
