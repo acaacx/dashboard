@@ -48,6 +48,39 @@ Out of scope, deliberately:
 - remember-me, sliding sessions, refresh tokens
 - rate limiting on scan ingestion, which remains its own known limitation
 
+## Delivery: two plans
+
+This spec is implemented in two plans, so there is a working checkpoint in the
+middle rather than one long stretch with the suite red. Migrating the existing
+API route tests to a `withSession()` helper lands in the first plan, and it
+touches every one of them.
+
+**Plan 1 — the wall.** Accounts, sessions, login and logout, and every dashboard
+page and read API behind a session. Provisioning CLI. Dev-account seeding for the
+memory driver. Existing API suites migrated.
+
+Checkpoint: nothing is reachable anonymously except the login page and scan
+ingestion; the full verification gate passes.
+
+**Plan 2 — roles and attribution.** `requireApprover`, role enforcement in the
+status action, `statusChangedBy` through the domain, both drivers and both
+`reconcileFinding` paths, and the viewer/approver UI in the drawer.
+
+Checkpoint: a risk acceptance records who signed it, and a viewer cannot sign
+one.
+
+### The `role` column ships in plan 1, unenforced
+
+`003_auth.sql` includes `role`, and `npm run user -- create` takes `--role`, even
+though nothing reads it until plan 2.
+
+The alternative — adding the column in a later migration — forces a backfill
+decision for accounts that already exist, and both answers are bad: default
+everyone to approver and the role split silently grants what it was built to
+withhold, or default everyone to viewer and every existing account loses the
+ability to act. Recording the intended role when the account is created avoids
+the question entirely.
+
 ## Decisions taken
 
 ### Identity: local accounts, `scrypt` from `node:crypto`
