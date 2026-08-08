@@ -1,12 +1,17 @@
 import Link from "next/link";
 
+import { signOutAction } from "@/app/login/actions";
 import { SidebarNav } from "@/components/shell/sidebar-nav";
 import { MockBadge } from "@/components/ui/badge";
+import { requireUser } from "@/lib/auth/guards";
 import { getSecurityContainer } from "@/lib/security/container";
 
 export default async function DashboardLayout({
   children,
 }: LayoutProps<"/dashboard">) {
+  // Redirects when absent. Not sufficient on its own — a layout does not re-run
+  // on every client-side navigation — so each page calls requireUser() too.
+  const user = await requireUser();
   const { usingMockData } = await getSecurityContainer();
 
   return (
@@ -25,6 +30,23 @@ export default async function DashboardLayout({
 
         <div className="mt-auto px-3">
           {usingMockData && <MockBadge />}
+
+          <p
+            className="text-ink-faint mt-3 truncate font-mono text-[10px]"
+            title={user.email}
+          >
+            {user.email}
+          </p>
+
+          <form action={signOutAction}>
+            <button
+              type="submit"
+              className="text-ink-faint hover:text-ink mt-1 font-mono text-[10px] tracking-[0.18em] uppercase"
+            >
+              Sign out
+            </button>
+          </form>
+
           <p className="text-ink-faint mt-3 font-mono text-[10px] leading-relaxed">
             Semgrep · Trivy
             <br />

@@ -4,6 +4,7 @@ import { scannerLabel } from "@/domain/security/enums";
 import { PageHeader } from "@/components/shell/page-header";
 import { SeverityBar } from "@/components/security/severity-chart";
 import { EmptyState, Panel } from "@/components/ui/panel";
+import { requireUser } from "@/lib/auth/guards";
 import { relativeTime } from "@/lib/format";
 import { getSecurityContainer } from "@/lib/security/container";
 
@@ -18,6 +19,10 @@ export const dynamic = "force-dynamic";
  * data path, no second source of truth.
  */
 export default async function ApplicationsPage() {
+  // Layouts do not re-run on every client-side navigation, so the layout check
+  // is a redirect rather than a gate. This is the gate.
+  await requireUser();
+
   const { securityService, platform } = await getSecurityContainer();
   const summaries = await securityService.getRepositorySummaries();
 

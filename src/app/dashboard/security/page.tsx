@@ -10,6 +10,7 @@ import { ScannerStatus } from "@/components/security/scanner-status";
 import { SeverityDonut } from "@/components/security/severity-chart";
 import { Panel } from "@/components/ui/panel";
 import { Stat } from "@/components/ui/stat";
+import { requireUser } from "@/lib/auth/guards";
 import { formatDuration } from "@/lib/format";
 import { getSecurityService } from "@/lib/security/container";
 import { setFindingStatusAction } from "./actions";
@@ -27,6 +28,10 @@ export const dynamic = "force-dynamic";
 export default async function SecurityPage({
   searchParams,
 }: PageProps<"/dashboard/security">) {
+  // Layouts do not re-run on every client-side navigation, so the layout check
+  // is a redirect rather than a gate. This is the gate.
+  await requireUser();
+
   const params = await searchParams;
   const selectedId = typeof params.finding === "string" ? params.finding : undefined;
 

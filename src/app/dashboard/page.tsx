@@ -5,6 +5,7 @@ import { SecurityFindingsCard } from "@/components/security/security-findings-ca
 import { TopVulnerabilities } from "@/components/security/top-vulnerabilities";
 import { Panel } from "@/components/ui/panel";
 import { Stat } from "@/components/ui/stat";
+import { requireUser } from "@/lib/auth/guards";
 import { formatDuration } from "@/lib/format";
 import { getSecurityService } from "@/lib/security/container";
 
@@ -23,6 +24,10 @@ export const dynamic = "force-dynamic";
  * output — only domain objects.
  */
 export default async function OverviewPage() {
+  // Layouts do not re-run on every client-side navigation, so the layout check
+  // is a redirect rather than a gate. This is the gate.
+  await requireUser();
+
   const service = await getSecurityService();
   const overview = await service.getOverview("all");
   const { statistics, topFindings, scannerHealth, trend } = overview;

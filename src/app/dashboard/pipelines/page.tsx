@@ -1,5 +1,6 @@
 import { PageHeader } from "@/components/shell/page-header";
 import { EmptyState, Panel } from "@/components/ui/panel";
+import { requireUser } from "@/lib/auth/guards";
 import { relativeTime } from "@/lib/format";
 import { getSecurityContainer } from "@/lib/security/container";
 import type { PipelineStageView } from "@/lib/security/services/security-service";
@@ -19,6 +20,10 @@ export const dynamic = "force-dynamic";
  * would put fictional deployment state on an operations dashboard.
  */
 export default async function PipelinesPage() {
+  // Layouts do not re-run on every client-side navigation, so the layout check
+  // is a redirect rather than a gate. This is the gate.
+  await requireUser();
+
   const { securityService, platform } = await getSecurityContainer();
   const pipelines = await securityService.getRepositoryPipelines();
 
