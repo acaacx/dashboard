@@ -1,4 +1,5 @@
 import { errorResponse, errorToResponse, jsonResponse } from "@/lib/api/http";
+import { protectedRoute } from "@/lib/auth/guards";
 import { getSecurityService } from "@/lib/security/container";
 import {
   formatZodIssues,
@@ -15,8 +16,12 @@ import {
  *
  * All arithmetic happens in the service and repository — this route only
  * validates input and serialises the answer.
+ *
+ * Requires a session. The findings this aggregates name real vulnerabilities in
+ * real repositories, so an anonymous read API would be a bypass around the UI's
+ * login wall rather than a convenience.
  */
-export async function GET(request: Request): Promise<Response> {
+export const GET = protectedRoute(async (request: Request): Promise<Response> => {
   try {
     const url = new URL(request.url);
     const parsed = statisticsQuerySchema.safeParse(
@@ -45,4 +50,4 @@ export async function GET(request: Request): Promise<Response> {
   } catch (error) {
     return errorToResponse(error);
   }
-}
+});

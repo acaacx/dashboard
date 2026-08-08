@@ -5,6 +5,7 @@ import {
   readJsonBody,
   requireIngestAuth,
 } from "@/lib/api/http";
+import { protectedRoute } from "@/lib/auth/guards";
 import { getSecurityContainer } from "@/lib/security/container";
 import {
   formatZodIssues,
@@ -16,8 +17,11 @@ import {
 /**
  * GET /api/security/scans — recent scan runs, which is what scanner health and
  * the pipeline view are built from.
+ *
+ * Requires a session. POST below does not: ingestion is a CI caller holding a
+ * bearer token, not a browser holding a cookie.
  */
-export async function GET(request: Request): Promise<Response> {
+export const GET = protectedRoute(async (request: Request): Promise<Response> => {
   try {
     const url = new URL(request.url);
     const parsed = scanRunQuerySchema.safeParse(
@@ -50,7 +54,7 @@ export async function GET(request: Request): Promise<Response> {
   } catch (error) {
     return errorToResponse(error);
   }
-}
+});
 
 /**
  * POST /api/security/scans — scan ingestion.

@@ -51,7 +51,7 @@ export async function getSessionUserFromRequest(
  * `[id]` route declares `protectedRoute<{ params: Promise<{ id: string }> }>`
  * and reads `routeContext.params` with no cast.
  */
-export function protectedRoute<Context = undefined>(
+export function protectedRoute<Context = unknown>(
   handler: (
     request: Request,
     context: { user: SessionUser; routeContext: Context },
@@ -59,6 +59,11 @@ export function protectedRoute<Context = undefined>(
 ): (request: Request, routeContext?: Context) => Promise<Response> {
   // routeContext is optional so a static route can be called with the request
   // alone, in a test or by Next. Next always supplies it for dynamic segments.
+  //
+  // The default is `unknown` rather than `undefined` because Next 16's generated
+  // route validator types every handler — static routes included — as receiving
+  // a `{ params }` context. A handler declaring that parameter as `undefined`
+  // fails that check even though it never reads it.
   return async (request: Request, routeContext?: Context) => {
     const user = await getSessionUserFromRequest(request);
 

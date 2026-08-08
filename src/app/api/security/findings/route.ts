@@ -1,5 +1,6 @@
 import type { FindingQuery } from "@/domain/security/finding";
 import { errorResponse, errorToResponse, jsonResponse } from "@/lib/api/http";
+import { protectedRoute } from "@/lib/auth/guards";
 import { getSecurityService } from "@/lib/security/container";
 import { timeframeCutoff } from "@/lib/security/services/security-service";
 import {
@@ -14,8 +15,12 @@ import {
  * Filtering, sorting and pagination all happen server-side; the response is one
  * page of normalized findings. Supported parameters are documented in the
  * README ("API").
+ *
+ * Requires a session. This list names real vulnerabilities in real
+ * repositories, so an anonymous read API would be a bypass around the UI's
+ * login wall rather than a convenience.
  */
-export async function GET(request: Request): Promise<Response> {
+export const GET = protectedRoute(async (request: Request): Promise<Response> => {
   try {
     const url = new URL(request.url);
     const parsed = findingQuerySchema.safeParse(
@@ -54,4 +59,4 @@ export async function GET(request: Request): Promise<Response> {
   } catch (error) {
     return errorToResponse(error);
   }
-}
+});
