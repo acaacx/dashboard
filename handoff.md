@@ -1,71 +1,89 @@
 # Handoff
 
-Updated 2026-08-07, end of session.
+Updated 2026-08-08.
 
 ## What we were doing
 
-Executing `docs/superpowers/plans/2026-08-07-manual-finding-status.md` — the
-manual finding status control: let a person mark a finding ACCEPTED_RISK,
-FALSE_POSITIVE or SUPPRESSED from the detail drawer, recording why.
+Designing and planning **dashboard authentication** — the next piece of work
+after the manual finding status control shipped on 2026-08-07.
 
-## State: finished, merged, pushed
+Two documents were written, reviewed and committed. **No implementation code
+exists yet.** The next session executes plan 1.
 
-All 8 plan tasks done. Merged to `main` (fast-forward), pushed to
-`origin/main` at `436afe4`. Working tree clean, `main` in sync with origin.
-Feature branch `feat/manual-finding-status` deleted after merge.
+## State: designed and planned, not started
 
-Nine commits, `580faf6..436afe4`.
+`main` at `c0eb1f8`, working tree clean, in sync with origin.
+
+Three commits this session, all documentation:
+
+- `cec6a79` — the design spec
+- `db2e092` — split into two plans
+- `c0eb1f8` — plan 1 written
+
+Read these two, in order:
+
+1. `docs/superpowers/specs/2026-08-08-dashboard-authentication-design.md`
+2. `docs/superpowers/plans/2026-08-08-dashboard-authentication-wall.md`
+
+## The single next action
+
+Execute plan 1, Task 1, using **superpowers:subagent-driven-development** — the
+user chose subagent-driven execution over inline. A fresh subagent per task,
+review between tasks.
+
+The plan is 13 TDD tasks. Task 1 is the migration plus the auth domain types.
 
 ## Verified, not assumed
 
-- `npm run lint && npm run typecheck && npm test && npm run build` — all clean,
-  run with `TEST_DATABASE_URL` set so Postgres suites ran rather than skipped.
-- **349 tests with a database, 297 without.** README carried a stale 272/323;
-  corrected. Contract suite is 46 assertions now (was 45).
-- Suite re-run on the merged `main`, not only on the branch.
-- Live in the dev server: accepted "Hardcoded AWS access key" with a reason —
-  open 23 → 22, accepted risk 1 → 2, critical 3 → 2, row left the Open filter,
-  donut re-rendered, and the reason read back through
-  `/api/security/findings?status=ACCEPTED_RISK` afterwards. The select offered
-  only Accepted risk / False positive / Suppressed.
-
-## Nothing is half-done
-
-No known next action. The plan's checkboxes are ticked and the design doc's
-status line says implemented.
+- Full gate passed on `main` before any of this started:
+  `npm run lint && npm run typecheck && npm test && npm run build` — clean.
+  **349 tests with `TEST_DATABASE_URL` set**, 24 files.
+- Test Postgres container was up on **5433** and the Postgres suites ran rather
+  than skipped.
+- Next 16 docs were read from `node_modules/next/dist/docs/`, not recalled:
+  `middleware.ts` is deprecated and renamed to `proxy.ts`, and Proxy defaults to
+  the Node runtime.
 
 ## Decisions already made — do not relitigate
 
-- **Server Action, not a REST route.** No user auth exists; the ingest token
-  belongs to CI. A public endpoint that flips CRITICAL to FALSE_POSITIVE is a
-  way to hide a vulnerability.
-- **No `changedBy`.** No authentication to derive an identity from; storing one
-  would fabricate attribution.
-- **Manual RESOLVED is withheld** from the UI and refused by the action, even
-  though `canTransition` permits OPEN -> RESOLVED. Asserting RESOLVED by hand
-  makes MTTR improvable without fixing anything. The divergence is intentional
-  and commented at both ends.
-- **Reason lives in its own field, not `metadata`.** `metadata` is
-  scanner-owned and merged incoming-over-existing.
-- **The action is injected as a prop** (page → `FindingsTable` → `FindingDetails`)
-  rather than imported by the client component, so component tests inject a stub
-  instead of booting a server runtime.
+- **Local accounts with `scrypt` from `node:crypto`.** No new dependency. OIDC,
+  a shared password, and trusting a proxy header were all considered and
+  rejected, with reasons recorded in the spec.
+- **Server-side sessions, not signed cookies.** Logout must be real revocation.
+- **Both storage drivers, one contract suite** — memory and Postgres, matching
+  `SecurityFindingRepository`.
+- **Everything behind the login except scan ingestion**, which keeps its bearer
+  token for CI.
+- **`VIEWER` / `APPROVER` roles**, but the column ships in plan 1 *unenforced*.
+  Adding it later would force a backfill default and both options are wrong.
+- **`statusChangedBy` is a denormalized email snapshot**, so deleting a departed
+  employee never blanks out their risk acceptances. Plan 2, not plan 1.
+- **Enforcement is structural**: `protectedRoute()` injects the session,
+  `requireUser()` runs in the layout *and* in each page.
+- **Provisioning is a CLI**, no self-signup, no admin UI.
 
 ## Traps
 
-- **`reconcileFinding` has two branches that matter.** The merge path restores
-  `statusReason` / `statusChangedAt` from the stored finding — drop those lines
-  and the next scan erases every justification. The NEW path *clears* them —
-  drop that and a scanner adapter can plant a justification. A test covers each.
-- **The plan missed a caller:** `src/lib/security/mock/seed-mock-data.ts` calls
-  `setFindingStatus`, which now needs a reason. It has one. Any new caller does
-  too — ACCEPTED_RISK / FALSE_POSITIVE / SUPPRESSED without a reason throws
-  `InvalidStatusReasonError`.
-- **`tests/helpers/postgres.ts` now reads every file in `db/migrations/`**, not
-  `001_init.sql` alone. Migration 003 will not need a helper edit.
-- **`.claude/launch.json` gained `"autoPort": true`** — port 3000 was held by
-  another session's dev server. A dev server from this session may still be
-  running; `preview_list` then `preview_stop` if it is in the way.
+- **`src/proxy.ts` is not a security boundary.** It checks only that a cookie is
+  present. Next's own docs warn that a matcher change silently drops Server
+  Function coverage, so every boundary validates for itself. A page that only
+  inherits the layout check is still reachable by client-side navigation —
+  layouts do not re-run on every navigation.
+- **scrypt `N` must stay 16384.** Memory is roughly `N * r * 128`; N=32768 with
+  r=8 hits Node's 32 MB default `maxmem` and throws at runtime.
+- **The scrypt parameters are duplicated in `scripts/user.mjs` on purpose.** The
+  CLI runs outside TypeScript and cannot import the app module. A test asserts a
+  CLI-written hash verifies through the application — without it, provisioning
+  silently creates accounts nobody can sign in to.
+- **The four `/api/security/*` route handlers have no tests today.** Nothing
+  under `tests/` imports one; the component suites stub global `fetch`. The spec
+  originally claimed existing suites would need migrating — that was wrong and
+  is corrected. Plan 1 writes the first route tests instead.
+- **The CLI cannot work against the memory driver.** It is a separate process
+  writing to a store the server cannot see. Hence the dev-account seed, which is
+  hard-refused when `NODE_ENV=production`.
 - Port 5432 on this machine is an SSH tunnel. Test container is on **5433**.
-- The container is cached on `globalThis`; seeding/wiring changes need a dev
+- The container is cached on `globalThis`; seeding and wiring changes need a dev
   server restart, not just a save.
+- `.claude/launch.json` has `"autoPort": true`. A dev server from an earlier
+  session may still be running — `preview_list` then `preview_stop`.
