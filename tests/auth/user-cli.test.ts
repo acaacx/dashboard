@@ -104,6 +104,36 @@ if (!TEST_DATABASE_URL) {
       expect(sessions.rows).toHaveLength(0);
     });
 
+    it("deletes a user without disturbing the decisions they signed", async () => {
+      await cli(["create", "--email", "leaver@example.com", "--role", "approver"]);
+
+      // A decision the departing user signed. Only the NOT NULL columns plus
+      // the attribution are needed to make the point.
+      await pool.query(
+        `INSERT INTO security_findings
+           (fingerprint, id, scanner, category, severity, title, status,
+            first_detected_at, last_detected_at, status_reason, status_changed_by)
+         VALUES ('fp_offboard', 'fnd_offboard', 'SEMGREP', 'SAST', 'HIGH',
+                 'SQL injection', 'ACCEPTED_RISK', now(), now(),
+                 'Compensating control documented in RISK-88.',
+                 'leaver@example.com')`,
+      );
+
+      await cli(["delete", "--email", "leaver@example.com"]);
+
+      const users = await pool.query("SELECT 1 FROM users WHERE email = $1", [
+        "leaver@example.com",
+      ]);
+      expect(users.rows).toHaveLength(0);
+
+      // The whole reason attribution is a text snapshot rather than a foreign
+      // key: offboarding must not erase a risk acceptance's signature.
+      const { rows } = await pool.query<{ status_changed_by: string }>(
+        "SELECT status_changed_by FROM security_findings WHERE id = 'fnd_offboard'",
+      );
+      expect(rows[0]?.status_changed_by).toBe("leaver@example.com");
+    });
+
     it("refuses to run against the memory driver", async () => {
       await expect(
         run("node", [SCRIPT, "list"], {

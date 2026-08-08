@@ -122,6 +122,7 @@ export function runSecurityFindingRepositoryContract(
         metadata: { owasp: ["A03"], nested: { a: 1 }, flag: true },
         statusReason: "Accepted while the vendor patch is in flight.",
         statusChangedAt: "2026-08-08T11:30:00.000Z",
+        statusChangedBy: "approver@example.com",
       });
 
       await repository.save(rich);
@@ -136,6 +137,7 @@ export function runSecurityFindingRepositoryContract(
       expect(stored?.metadata).toBeUndefined();
       expect(stored?.statusReason).toBeUndefined();
       expect(stored?.statusChangedAt).toBeUndefined();
+      expect(stored?.statusChangedBy).toBeUndefined();
     });
 
     it("finds by id and by fingerprint, and returns null when absent", async () => {
@@ -347,28 +349,36 @@ export function runSecurityFindingRepositoryContract(
         status: "ACCEPTED_RISK",
         statusReason: "Compensating control documented in RISK-88.",
         statusChangedAt: "2026-08-11T08:00:00.000Z",
+        statusChangedBy: "approver@example.com",
       });
       expect(accepted?.statusReason).toBe(
         "Compensating control documented in RISK-88.",
       );
       expect(accepted?.statusChangedAt).toBe("2026-08-11T08:00:00.000Z");
+      expect(accepted?.statusChangedBy).toBe("approver@example.com");
 
       const reloaded = await repository.findByFingerprint("a");
       expect(reloaded?.statusReason).toBe(
         "Compensating control documented in RISK-88.",
       );
       expect(reloaded?.statusChangedAt).toBe("2026-08-11T08:00:00.000Z");
+      expect(reloaded?.statusChangedBy).toBe("approver@example.com");
 
       const reopened = await repository.update(target!.id, {
         status: "OPEN",
         statusReason: undefined,
         statusChangedAt: "2026-08-12T08:00:00.000Z",
+        statusChangedBy: undefined,
       });
       // Cleared, not stored as an empty string — the same NULL-versus-empty
       // distinction the rest of this suite guards.
       expect(reopened?.statusReason).toBeUndefined();
+      expect(reopened?.statusChangedBy).toBeUndefined();
       expect(
         (await repository.findByFingerprint("a"))?.statusReason,
+      ).toBeUndefined();
+      expect(
+        (await repository.findByFingerprint("a"))?.statusChangedBy,
       ).toBeUndefined();
     });
 

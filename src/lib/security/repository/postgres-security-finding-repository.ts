@@ -46,11 +46,11 @@ const COLUMNS = `
   cve, cwe, rule_id,
   resource, azure_resource_id, subscription_id, resource_group,
   status, first_detected_at, last_detected_at, resolved_at,
-  status_reason, status_changed_at,
+  status_reason, status_changed_at, status_changed_by,
   remediation, source_url, metadata
 `;
 
-const COLUMN_COUNT = 35;
+const COLUMN_COUNT = 36;
 
 interface FindingRow {
   fingerprint: string;
@@ -85,6 +85,7 @@ interface FindingRow {
   resolved_at: Date | null;
   status_reason: string | null;
   status_changed_at: Date | null;
+  status_changed_by: string | null;
   remediation: string | null;
   source_url: string | null;
   metadata: Record<string, unknown> | null;
@@ -132,6 +133,7 @@ function toFinding(row: FindingRow): SecurityFinding {
     resolvedAt: iso(row.resolved_at),
     statusReason: undef(row.status_reason),
     statusChangedAt: iso(row.status_changed_at),
+    statusChangedBy: undef(row.status_changed_by),
     remediation: undef(row.remediation),
     sourceUrl: undef(row.source_url),
     metadata: row.metadata ?? undefined,
@@ -172,6 +174,7 @@ function toParams(finding: SecurityFinding): unknown[] {
     finding.resolvedAt ?? null,
     finding.statusReason ?? null,
     finding.statusChangedAt ?? null,
+    finding.statusChangedBy ?? null,
     finding.remediation ?? null,
     finding.sourceUrl ?? null,
     finding.metadata ? JSON.stringify(finding.metadata) : null,
@@ -179,8 +182,8 @@ function toParams(finding: SecurityFinding): unknown[] {
 }
 
 /**
- * Postgres caps a statement at 65535 bound parameters. At 35 columns per row
- * that is ~1872 rows; chunk well below it so a large Trivy image report cannot
+ * Postgres caps a statement at 65535 bound parameters. At 36 columns per row
+ * that is ~1820 rows; chunk well below it so a large Trivy image report cannot
  * fail on batch size alone.
  */
 const MAX_ROWS_PER_INSERT = 500;
@@ -392,6 +395,7 @@ export class PostgresSecurityFindingRepository
              resolved_at = EXCLUDED.resolved_at,
              status_reason = EXCLUDED.status_reason,
              status_changed_at = EXCLUDED.status_changed_at,
+             status_changed_by = EXCLUDED.status_changed_by,
              remediation = EXCLUDED.remediation,
              source_url = EXCLUDED.source_url,
              metadata = EXCLUDED.metadata`,
