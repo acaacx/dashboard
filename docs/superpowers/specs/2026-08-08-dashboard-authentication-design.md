@@ -51,13 +51,12 @@ Out of scope, deliberately:
 ## Delivery: two plans
 
 This spec is implemented in two plans, so there is a working checkpoint in the
-middle rather than one long stretch with the suite red. Migrating the existing
-API route tests to a `withSession()` helper lands in the first plan, and it
-touches every one of them.
+middle rather than one long stretch before anything is verifiable.
 
 **Plan 1 — the wall.** Accounts, sessions, login and logout, and every dashboard
 page and read API behind a session. Provisioning CLI. Dev-account seeding for the
-memory driver. Existing API suites migrated.
+memory driver. The first route-handler tests, since the four read routes
+currently have none.
 
 Checkpoint: nothing is reachable anonymously except the login page and scan
 ingestion; the full verification gate passes.
@@ -388,10 +387,15 @@ CLI: creates a user, refuses a duplicate, refuses the memory driver, rejects a
 password under 12 characters, and deletes a user without disturbing the
 `statusChangedBy` already recorded on that user's decisions.
 
-**Known cost, stated up front:** every existing test that exercises
-`/api/security/*` fails the moment those routes require a session. They need a
-`withSession()` helper and updating. That is real work in the plan, not a
-footnote.
+**The route handlers have no tests today.** Nothing under `tests/` imports a
+handler from `src/app/api/`; the component suites stub global `fetch` instead. So
+wrapping them in `protectedRoute` breaks no existing test — but it also means
+there is no safety net proving the wrapper preserves each route's behavior.
+
+Plan 1 therefore writes the first route-handler tests: for each of the four read
+routes, one test that an anonymous request gets 401 and one that an authenticated
+request returns the same body it returns today. A `withSession()` helper creates
+a real session against the configured store and returns the cookie header.
 
 ## Verification
 
