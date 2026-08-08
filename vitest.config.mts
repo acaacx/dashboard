@@ -15,6 +15,14 @@ export default defineConfig({
   resolve: {
     alias: {
       "@": new URL("./src", import.meta.url).pathname,
+      // `server-only` throws unless it resolves under React's `react-server`
+      // condition, which Vitest does not set. Point it at the no-op entry the
+      // package itself ships for that condition, so a composition root or a
+      // guard can be unit-tested directly rather than only through a mock.
+      "server-only": new URL(
+        "./node_modules/server-only/empty.js",
+        import.meta.url,
+      ).pathname,
     },
   },
 });
