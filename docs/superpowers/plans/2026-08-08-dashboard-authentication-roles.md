@@ -78,7 +78,7 @@ The field and the two lines of `reconcileFinding` that make it survive a scan wi
 - Consumes: nothing from earlier tasks.
 - Produces: `SecurityFinding.statusChangedBy?: string`. Every later task reads or writes this exact name.
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 Append these two tests inside the existing `describe("reconcileFinding and human decisions", …)` block in `tests/lifecycle.test.ts`, after the "does not invent a justification" test:
 
@@ -112,7 +112,7 @@ Append these two tests inside the existing `describe("reconcileFinding and human
   });
 ```
 
-- [ ] **Step 2: Run the tests to verify they fail**
+- [x] **Step 2: Run the tests to verify they fail**
 
 ```bash
 npx vitest run tests/lifecycle.test.ts
@@ -120,7 +120,7 @@ npx vitest run tests/lifecycle.test.ts
 
 Expected: FAIL — TypeScript rejects `statusChangedBy` as an unknown property of `Partial<SecurityFinding>`.
 
-- [ ] **Step 3: Add the field**
+- [x] **Step 3: Add the field**
 
 In `src/domain/security/finding.ts`, immediately after the `statusChangedAt` declaration:
 
@@ -144,7 +144,7 @@ In `src/domain/security/finding.ts`, immediately after the `statusChangedAt` dec
   statusChangedBy?: string;
 ```
 
-- [ ] **Step 4: Thread it through both `reconcileFinding` paths**
+- [x] **Step 4: Thread it through both `reconcileFinding` paths**
 
 In `src/lib/security/lifecycle.ts`, the NEW path (inside `if (!existing)`), directly after `statusChangedAt: undefined,`:
 
@@ -168,7 +168,7 @@ And in the `merged` object, directly after `statusChangedAt: existing.statusChan
 
 (Update the existing comment's "these two lines" to "these three lines" as shown.)
 
-- [ ] **Step 5: Run the tests to verify they pass**
+- [x] **Step 5: Run the tests to verify they pass**
 
 ```bash
 npx vitest run tests/lifecycle.test.ts
@@ -176,7 +176,7 @@ npx vitest run tests/lifecycle.test.ts
 
 Expected: PASS, including the pre-existing `statusReason` tests.
 
-- [ ] **Step 6: Run the gate**
+- [x] **Step 6: Run the gate**
 
 ```bash
 npm run lint && npm run typecheck && npm test
@@ -184,7 +184,7 @@ npm run lint && npm run typecheck && npm test
 
 Expected: all green.
 
-- [ ] **Step 7: Commit**
+- [x] **Step 7: Commit**
 
 ```bash
 git add src/domain/security/finding.ts src/lib/security/lifecycle.ts tests/lifecycle.test.ts
@@ -207,7 +207,7 @@ Migration `004`, the PostgreSQL column plumbing, and contract-suite coverage. Th
 - Consumes: `SecurityFinding.statusChangedBy?: string` (Task 1).
 - Produces: `security_findings.status_changed_by TEXT` — nullable, no foreign key. Round-trips through `save`, `saveMany` and `update` in both drivers.
 
-- [ ] **Step 1: Write the failing contract assertions**
+- [x] **Step 1: Write the failing contract assertions**
 
 In `tests/repository/repository-contract.ts`, in the round-trip test, add to the `rich` finding's overrides beside `statusReason` / `statusChangedAt`:
 
@@ -259,7 +259,7 @@ and, on the reopen half of that test:
       ).toBeUndefined();
 ```
 
-- [ ] **Step 2: Run the contract suite to verify it fails**
+- [x] **Step 2: Run the contract suite to verify it fails**
 
 ```bash
 npx vitest run tests/repository
@@ -267,7 +267,7 @@ npx vitest run tests/repository
 
 Expected: the in-memory suite passes (it spreads the patch), the PostgreSQL suite FAILS — `statusChangedBy` is `undefined` after a reload because no column stores it. If the PostgreSQL suite skips, `TEST_DATABASE_URL` is not exported; export it and re-run.
 
-- [ ] **Step 3: Write the migration**
+- [x] **Step 3: Write the migration**
 
 Create `db/migrations/004_status_changed_by.sql`:
 
@@ -293,7 +293,7 @@ ALTER TABLE security_findings
   ADD COLUMN IF NOT EXISTS status_changed_by TEXT;
 ```
 
-- [ ] **Step 4: Plumb the column through the PostgreSQL repository**
+- [x] **Step 4: Plumb the column through the PostgreSQL repository**
 
 Five edits in `src/lib/security/repository/postgres-security-finding-repository.ts`. The order of `COLUMNS` and of `toParams` must stay identical — they are positional.
 
@@ -346,7 +346,7 @@ And the batching comment above `MAX_ROWS_PER_INSERT`, which quotes the column co
  */
 ```
 
-- [ ] **Step 5: Apply the migration to the test database and re-run**
+- [x] **Step 5: Apply the migration to the test database and re-run**
 
 ```bash
 npx vitest run tests/repository
@@ -354,7 +354,7 @@ npx vitest run tests/repository
 
 Expected: PASS for both drivers. `tests/helpers/postgres.ts` reads every file in `db/migrations/`, so `004` is applied to the scoped test schema automatically — no helper edit.
 
-- [ ] **Step 6: Write the offboarding test**
+- [x] **Step 6: Write the offboarding test**
 
 This is what the whole foreign-key decision was made for. In `tests/auth/user-cli.test.ts`, inside the existing `describe("user CLI", …)`:
 
@@ -390,7 +390,7 @@ This is what the whole foreign-key decision was made for. In `tests/auth/user-cl
 
 If the CLI's `delete` requires a confirmation flag, read `scripts/user.mjs` and pass whatever the existing delete tests in this file pass — match them exactly rather than inventing an argument.
 
-- [ ] **Step 7: Run the auth suite**
+- [x] **Step 7: Run the auth suite**
 
 ```bash
 npx vitest run tests/auth
@@ -398,13 +398,13 @@ npx vitest run tests/auth
 
 Expected: PASS. The insert succeeds and the row survives the delete because there is no foreign key — if this fails with a constraint violation, a `REFERENCES` clause was added to `004`; remove it.
 
-- [ ] **Step 8: Run the gate**
+- [x] **Step 8: Run the gate**
 
 ```bash
 npm run lint && npm run typecheck && npm test
 ```
 
-- [ ] **Step 9: Commit**
+- [x] **Step 9: Commit**
 
 ```bash
 git add db/migrations/004_status_changed_by.sql src/lib/security/repository/postgres-security-finding-repository.ts tests/repository/repository-contract.ts tests/auth/user-cli.test.ts
@@ -436,7 +436,7 @@ setFindingStatus(
 
   Task 5 calls it as `setFindingStatus(id, status, reason, { changedBy: user.email })`.
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 Append to `describe("SecurityService.setFindingStatus", …)` in `tests/services/finding-status.test.ts`:
 
@@ -475,7 +475,7 @@ Append to `describe("SecurityService.setFindingStatus", …)` in `tests/services
   });
 ```
 
-- [ ] **Step 2: Run the tests to verify they fail**
+- [x] **Step 2: Run the tests to verify they fail**
 
 ```bash
 npx vitest run tests/services/finding-status.test.ts
@@ -483,7 +483,7 @@ npx vitest run tests/services/finding-status.test.ts
 
 Expected: FAIL — TypeScript rejects an object where `now: Date` is expected.
 
-- [ ] **Step 3: Change the signature and record the author**
+- [x] **Step 3: Change the signature and record the author**
 
 In `src/lib/security/services/security-service.ts`, replace the parameter list and the first line of the body:
 
@@ -521,13 +521,13 @@ Extend the method's doc comment with one line:
    * finding. The caller supplies it from the session; the service never guesses.
 ```
 
-- [ ] **Step 4: Update the existing call sites**
+- [x] **Step 4: Update the existing call sites**
 
 In `tests/services/finding-status.test.ts` only: every place `NOW` is passed as the fourth argument becomes `{ now: NOW }`. Mechanically, `, NOW,` → `, { now: NOW },` and `, NOW)` → `, { now: NOW })` within `setFindingStatus(…)` calls.
 
 `src/lib/security/mock/seed-mock-data.ts:173` and `tests/repository/postgres-ingestion.test.ts:137` pass three arguments and need no change. **Do not** give the mock seed a `changedBy`: the seeded decision has no real author, and inventing one is the fabrication this whole design removed.
 
-- [ ] **Step 5: Run the tests to verify they pass**
+- [x] **Step 5: Run the tests to verify they pass**
 
 ```bash
 npx vitest run tests/services/finding-status.test.ts
@@ -535,7 +535,7 @@ npx vitest run tests/services/finding-status.test.ts
 
 Expected: PASS, including every pre-existing test in the file.
 
-- [ ] **Step 6: Run the gate**
+- [x] **Step 6: Run the gate**
 
 ```bash
 npm run lint && npm run typecheck && npm test
@@ -543,7 +543,7 @@ npm run lint && npm run typecheck && npm test
 
 Expected: green. `npm run typecheck` is the check that no call site was missed.
 
-- [ ] **Step 7: Commit**
+- [x] **Step 7: Commit**
 
 ```bash
 git add src/lib/security/services/security-service.ts tests/services/finding-status.test.ts
@@ -572,7 +572,7 @@ The guard. It throws rather than redirecting, because its only caller is a Serve
 
   Task 5 catches both through `isAuthDomainError`; Task 6 keys the sign-in link off the string `"UNAUTHENTICATED"`.
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 Create `tests/auth/require-approver.test.ts`:
 
@@ -657,7 +657,7 @@ describe("requireApprover", () => {
 });
 ```
 
-- [ ] **Step 2: Run the test to verify it fails**
+- [x] **Step 2: Run the test to verify it fails**
 
 ```bash
 npx vitest run tests/auth/require-approver.test.ts
@@ -665,7 +665,7 @@ npx vitest run tests/auth/require-approver.test.ts
 
 Expected: FAIL — `NotAuthenticatedError`, `ForbiddenError` and `requireApprover` do not exist.
 
-- [ ] **Step 3: Add the errors**
+- [x] **Step 3: Add the errors**
 
 Append to `src/domain/auth/errors.ts`, before `isAuthDomainError`:
 
@@ -697,7 +697,7 @@ export class ForbiddenError extends AuthDomainError {
 }
 ```
 
-- [ ] **Step 4: Add `isApprover`**
+- [x] **Step 4: Add `isApprover`**
 
 Append to `src/domain/auth/user.ts`:
 
@@ -714,7 +714,7 @@ export function isApprover(user: Pick<SessionUser, "role">): boolean {
 }
 ```
 
-- [ ] **Step 5: Add the guard**
+- [x] **Step 5: Add the guard**
 
 In `src/lib/auth/guards.ts`, add one import and extend the existing `SessionUser` import — the file already has `import type { SessionUser } from "@/domain/auth/user";`, which becomes a value import because `isApprover` is a function:
 
@@ -745,7 +745,7 @@ export async function requireApprover(): Promise<SessionUser> {
 }
 ```
 
-- [ ] **Step 6: Run the test to verify it passes**
+- [x] **Step 6: Run the test to verify it passes**
 
 ```bash
 npx vitest run tests/auth/require-approver.test.ts
@@ -753,13 +753,13 @@ npx vitest run tests/auth/require-approver.test.ts
 
 Expected: PASS, four tests.
 
-- [ ] **Step 7: Run the gate**
+- [x] **Step 7: Run the gate**
 
 ```bash
 npm run lint && npm run typecheck && npm test
 ```
 
-- [ ] **Step 8: Commit**
+- [x] **Step 8: Commit**
 
 ```bash
 git add src/domain/auth/errors.ts src/domain/auth/user.ts src/lib/auth/guards.ts tests/auth/require-approver.test.ts
@@ -778,7 +778,7 @@ git commit -m "feat: add the approver guard"
 - Consumes: `requireApprover()` (Task 4), `setFindingStatus(…, { changedBy })` (Task 3).
 - Produces: `setFindingStatusAction` unchanged in signature, now returning `code: "UNAUTHENTICATED"` and `code: "FORBIDDEN"` failures. `SetStatusResult` already types `code` as `string`, so `src/lib/security/status-change.ts` needs no edit.
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 Rewrite the head of `tests/actions/finding-status-action.test.ts` so every test runs as a real approver, and add the refusal tests. Replace everything from the imports down to the end of `beforeEach` with:
 
@@ -889,7 +889,7 @@ Then add these tests to the existing `describe("setFindingStatusAction", …)`:
   });
 ```
 
-- [ ] **Step 2: Run the tests to verify they fail**
+- [x] **Step 2: Run the tests to verify they fail**
 
 ```bash
 npx vitest run tests/actions/finding-status-action.test.ts
@@ -897,7 +897,7 @@ npx vitest run tests/actions/finding-status-action.test.ts
 
 Expected: FAIL — the action ignores the session entirely, so the viewer and no-session cases reach the service and the `changedBy` assertion sees three arguments.
 
-- [ ] **Step 3: Enforce and thread**
+- [x] **Step 3: Enforce and thread**
 
 Rewrite `src/app/dashboard/security/actions.ts`. The doc comment is stale — it states the application has no user authentication — so it is replaced, not appended to:
 
@@ -982,7 +982,7 @@ export async function setFindingStatusAction(
 
 Note the ordering: the two shape checks stay ahead of the session check, so the existing "refuses RESOLVED before the service is consulted" test keeps passing regardless of who is signed in, and a malformed status never costs a session lookup.
 
-- [ ] **Step 4: Run the tests to verify they pass**
+- [x] **Step 4: Run the tests to verify they pass**
 
 ```bash
 npx vitest run tests/actions/finding-status-action.test.ts
@@ -990,13 +990,13 @@ npx vitest run tests/actions/finding-status-action.test.ts
 
 Expected: PASS — the four new tests plus all seven pre-existing ones.
 
-- [ ] **Step 5: Run the gate**
+- [x] **Step 5: Run the gate**
 
 ```bash
 npm run lint && npm run typecheck && npm test
 ```
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add src/app/dashboard/security/actions.ts tests/actions/finding-status-action.test.ts
@@ -1018,7 +1018,7 @@ git commit -m "feat: require an approver to change a finding's status"
 - Consumes: `SecurityFinding.statusChangedBy` (Task 1), `isApprover` (Task 4), the `"UNAUTHENTICATED"` code (Task 5).
 - Produces: `canDecide?: boolean` on both `FindingDetails` and `FindingsTable`, defaulting to `false`.
 
-- [ ] **Step 1: Write the failing component tests**
+- [x] **Step 1: Write the failing component tests**
 
 Add to `tests/components/finding-details.test.tsx`:
 
@@ -1155,7 +1155,7 @@ Then add a test that the flag actually reaches the drawer, matching that file's 
   });
 ```
 
-- [ ] **Step 2: Run the tests to verify they fail**
+- [x] **Step 2: Run the tests to verify they fail**
 
 ```bash
 npx vitest run tests/components
@@ -1163,7 +1163,7 @@ npx vitest run tests/components
 
 Expected: FAIL — `canDecide` is not a prop.
 
-- [ ] **Step 3: Update `FindingDetails`**
+- [x] **Step 3: Update `FindingDetails`**
 
 Props:
 
@@ -1215,7 +1215,7 @@ And pass the flag down:
               )}
 ```
 
-- [ ] **Step 4: Update `DecisionForm`**
+- [x] **Step 4: Update `DecisionForm`**
 
 Signature and state:
 
@@ -1304,7 +1304,7 @@ The explanation, rendered in place of the error slot when locked:
 
 The sign-in link is a plain `<a>`, not a `next/link`: an expired session needs a full document load so the server can redirect and set a fresh cookie.
 
-- [ ] **Step 5: Pass the flag through the table and the page**
+- [x] **Step 5: Pass the flag through the table and the page**
 
 `src/components/security/findings-table.tsx` — add to the destructured props and the type:
 
@@ -1361,7 +1361,7 @@ import { isApprover } from "@/domain/auth/user";
         />
 ```
 
-- [ ] **Step 6: Run the tests to verify they pass**
+- [x] **Step 6: Run the tests to verify they pass**
 
 ```bash
 npx vitest run tests/components
@@ -1369,13 +1369,13 @@ npx vitest run tests/components
 
 Expected: PASS.
 
-- [ ] **Step 7: Run the gate**
+- [x] **Step 7: Run the gate**
 
 ```bash
 npm run lint && npm run typecheck && npm test
 ```
 
-- [ ] **Step 8: Commit**
+- [x] **Step 8: Commit**
 
 ```bash
 git add src/components/security/finding-details.tsx src/components/security/findings-table.tsx src/app/dashboard/security/page.tsx tests/components
@@ -1396,7 +1396,7 @@ git commit -m "feat: show a decision's author and lock a viewer's control"
 - Consumes: everything above.
 - Produces: no code.
 
-- [ ] **Step 1: Update the README**
+- [x] **Step 1: Update the README**
 
 Three edits, all replacing text that is now false.
 
@@ -1460,7 +1460,7 @@ In "Known limitations", **delete** this entry — it is now false:
 
 Leave the other limitations alone. Do not add a new one: this plan closes a gap rather than opening one.
 
-- [ ] **Step 2: Update `CLAUDE.md`**
+- [x] **Step 2: Update `CLAUDE.md`**
 
 Invariant 4 currently reads:
 
@@ -1482,13 +1482,13 @@ Extend it so the next reader does not reintroduce the bug this plan guards:
 
 Also update the storage section's test count once the final run reports it.
 
-- [ ] **Step 3: Mark the spec and this plan complete**
+- [x] **Step 3: Mark the spec and this plan complete**
 
 In the spec, change `**Status:** designed, not yet implemented` to `**Status:** implemented (plan 1 2026-08-08, plan 2 2026-08-08)`.
 
 In this plan, tick every checkbox that has been completed.
 
-- [ ] **Step 4: Run the full gate, including the build**
+- [x] **Step 4: Run the full gate, including the build**
 
 ```bash
 npm run lint && npm run typecheck && npm test && npm run build
@@ -1496,7 +1496,7 @@ npm run lint && npm run typecheck && npm test && npm run build
 
 Expected: green, with `TEST_DATABASE_URL` exported so the PostgreSQL suites run rather than skip. Record the test count.
 
-- [ ] **Step 5: Live verification in the dev server**
+- [x] **Step 5: Live verification in the dev server**
 
 Start the dev server (`.claude/launch.json` has `"autoPort": true`, so it will not be on 3000 — read the reported port) and check all six:
 
@@ -1507,7 +1507,7 @@ Start the dev server (`.claude/launch.json` has `"autoPort": true`, so it will n
 5. Sign out in a second tab, then submit a decision in the first: the drawer shows the expiry message with a working Sign in link.
 6. Run a scan ingestion (`POST /api/security/scans`) that re-reports the accepted finding, and confirm the email and the justification survive it.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add README.md CLAUDE.md docs/superpowers

@@ -30,6 +30,10 @@ scanner output -> adapter -> SecurityFinding -> repository -> service -> API -> 
    adapter's `refine`, and tests assert it. Do not remove them.
 4. **`firstDetectedAt` is never overwritten**, and `ACCEPTED_RISK` /
    `FALSE_POSITIVE` / `SUPPRESSED` are never auto-changed by a scan.
+   `statusReason` / `statusChangedAt` / `statusChangedBy` are restored from the
+   stored finding on the merge path and cleared on the NEW path — dropping the
+   first lets a scan erase attribution, dropping the second lets an adapter
+   forge one.
 5. **Fingerprints exclude** timestamps, severity, status, description, commit and
    branch. Adding any of them silently duplicates every finding on every scan.
 6. **No `dangerouslySetInnerHTML`.** Scanner text is untrusted. `sourceUrl` is
@@ -52,7 +56,7 @@ escaping, page clamping, tiebreak ordering and MTTR-undefined-not-zero.
 docker run -d --name dashboard-test-pg -e POSTGRES_PASSWORD=postgres \
   -e POSTGRES_DB=dashboard_test -p 5433:5432 postgres:17-alpine
 export TEST_DATABASE_URL=postgres://postgres:postgres@localhost:5433/dashboard_test
-npm test          # 323 tests; without the URL, 272 + 2 skipped
+npm test          # 486 tests; without the URL, 401 + 5 skipped
 ```
 
 Migrations are forward-only SQL in `db/migrations/`, applied by

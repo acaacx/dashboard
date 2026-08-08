@@ -203,8 +203,16 @@ mean-time-to-remediate a number anyone can improve without fixing anything.
 restriction is UI policy, enforced again in the Server Action so the `<select>`
 is not the only thing standing in the way.
 
-No actor is recorded. There is no user authentication to derive one from, and a
-stored `changedBy` would be fabricated attribution.
+The deciding account's email is recorded in `statusChangedBy`, snapshotted at
+the moment of the decision rather than joined through a foreign key: a risk
+acceptance is an audit record that has to survive the person leaving. Deleting
+an account therefore leaves every decision it signed intact, and a later email
+change does not rewrite history. `reconcileFinding` carries it exactly as it
+carries the justification — restored on the merge path, cleared on the NEW path.
+
+Only an `APPROVER` may decide. A viewer sees the control disabled with the
+reason, and `setFindingStatusAction` re-checks the role regardless of what the
+drawer rendered.
 
 ---
 
@@ -628,10 +636,30 @@ account-enumeration oracle.
 
 ### Roles
 
-Accounts are `VIEWER` or `APPROVER`. The role is recorded and settable, but
-**nothing reads it to make a decision yet** — any signed-in account can still
-change a finding's status. Enforcement, and recording who made a decision, land
-with the second half of this work.
+Accounts are `VIEWER` or `APPROVER`.
+
+| | Read the dashboard and every recorded justification | Change a finding's status |
+|---|---|---|
+| `VIEWER` | yes | no |
+| `APPROVER` | yes | yes |
+
+The split exists because developers need to see their own findings without being
+able to dismiss them.
+
+The role is chosen at provisioning and changed afterwards:
+
+```bash
+npm run user -- create --email alice@example.com --role approver
+npm run user -- role --email alice@example.com --role viewer
+```
+
+Enforcement is in the Server Action (`requireApprover()`), not in the UI. The
+drawer's disabled control is a courtesy; a crafted request meets the same
+refusal, the same way manual `RESOLVED` is refused there rather than only
+hidden.
+
+A decision records the deciding account's email on the finding as
+`statusChangedBy` — see [Manual decisions](#manual-decisions).
 
 ---
 
@@ -694,9 +722,6 @@ interactive state — so a coloured pixel always means something. Motion respect
   sustained outage means every request pays the full retry budget before failing.
 - GitHub and Azure providers are declared and stubbed, not implemented; pages
   that would use them say so rather than showing placeholder data.
-- Roles are recorded but not yet enforced: any signed-in account can change a
-  finding's status, and no author is recorded on the decision. Both land with
-  the second half of the authentication work.
 - With the in-memory driver, accounts and sessions do not survive a restart, so
   the dashboard reseeds a development account on each boot. Authentication on
   the memory driver is a development convenience; a deployment means Postgres.

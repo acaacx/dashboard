@@ -1,7 +1,7 @@
 # Dashboard authentication and decision attribution
 
 **Date:** 2026-08-08
-**Status:** designed, not yet implemented
+**Status:** implemented (plan 1 2026-08-08, plan 2 2026-08-08)
 
 ## Problem
 
