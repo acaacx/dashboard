@@ -3,7 +3,8 @@ import "server-only";
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 
-import type { SessionUser } from "@/domain/auth/user";
+import { ForbiddenError, NotAuthenticatedError } from "@/domain/auth/errors";
+import { isApprover, type SessionUser } from "@/domain/auth/user";
 import { errorResponse } from "@/lib/api/http";
 import { getAuthService } from "./container";
 import { readSessionCookie, SESSION_COOKIE_NAME } from "./cookie";
@@ -100,5 +101,23 @@ export async function getSessionUser(): Promise<SessionUser | null> {
 export async function requireUser(): Promise<SessionUser> {
   const user = await getSessionUser();
   if (!user) redirect("/login");
+  return user;
+}
+
+/**
+ * Require an approver in a Server Action.
+ *
+ * Throws instead of redirecting like `requireUser`, because an action's caller
+ * is a fetch rather than a navigation: the action maps `AuthDomainError` to its
+ * `{ ok: false, code, message }` result and the drawer renders it.
+ *
+ * Not redundant with the UI. `canDecide` decides what renders; a select element
+ * is not a security boundary, exactly as the manual-RESOLVED ban is enforced
+ * here as well as hidden there.
+ */
+export async function requireApprover(): Promise<SessionUser> {
+  const user = await getSessionUser();
+  if (!user) throw new NotAuthenticatedError();
+  if (!isApprover(user)) throw new ForbiddenError();
   return user;
 }

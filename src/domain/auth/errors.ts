@@ -72,6 +72,32 @@ export class WeakPasswordError extends AuthDomainError {
   }
 }
 
+/**
+ * No usable session: absent, expired, revoked, or belonging to a deleted user.
+ *
+ * A Server Action reports this as a value rather than redirecting. The caller is
+ * a fetch from an open drawer, so a redirect would be followed by that fetch and
+ * the user would see nothing happen.
+ */
+export class NotAuthenticatedError extends AuthDomainError {
+  readonly code = "UNAUTHENTICATED";
+  readonly httpStatus = 401;
+
+  constructor() {
+    super("Your session has expired. Sign in again to continue.");
+  }
+}
+
+/** Signed in, but the role does not permit this. Names no credential. */
+export class ForbiddenError extends AuthDomainError {
+  readonly code = "FORBIDDEN";
+  readonly httpStatus = 403;
+
+  constructor() {
+    super("Approver role is required to change a finding's status.");
+  }
+}
+
 export function isAuthDomainError(error: unknown): error is AuthDomainError {
   return error instanceof AuthDomainError;
 }

@@ -39,6 +39,17 @@ export function toSessionUser(user: User): SessionUser {
   return { id: user.id, email: user.email, role: user.role };
 }
 
+/**
+ * Only an approver may change a finding's status.
+ *
+ * Lives here rather than in a guard so a client component can ask the same
+ * question under jsdom without a server runtime — the drawer's `canDecide` and
+ * the action's refusal must not be able to drift apart.
+ */
+export function isApprover(user: Pick<SessionUser, "role">): boolean {
+  return user.role === "APPROVER";
+}
+
 /** Stored and compared lowercased, so Alice@… and alice@… are one account. */
 export function normalizeEmail(email: string): string {
   return email.trim().toLowerCase();
