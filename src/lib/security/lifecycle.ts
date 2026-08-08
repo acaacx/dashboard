@@ -62,6 +62,7 @@ export function reconcileFinding(
         // A scanner has no standing to record a human decision.
         statusReason: undefined,
         statusChangedAt: undefined,
+        statusChangedBy: undefined,
       },
       transition: "NEW",
     };
@@ -90,9 +91,11 @@ export function reconcileFinding(
     status: existing.status,
     resolvedAt: existing.resolvedAt,
     // A human decision outlives the scan that re-reported the finding. Omitting
-    // these two lines silently erases every justification on the next scan.
+    // these three lines silently erases every justification and its author on
+    // the next scan.
     statusReason: existing.statusReason,
     statusChangedAt: existing.statusChangedAt,
+    statusChangedBy: existing.statusChangedBy,
     metadata: { ...existing.metadata, ...incoming.metadata },
   };
 

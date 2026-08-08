@@ -89,6 +89,21 @@ export interface SecurityFinding {
   statusChangedAt?: string;
 
   /**
+   * Email of the person who made the last manual status change, snapshotted at
+   * the moment of the decision.
+   *
+   * Denormalized on purpose. A risk acceptance is an audit record and has to
+   * survive the person leaving: a foreign key would force a choice between
+   * never deleting a departed employee and silently erasing attribution from
+   * real acceptances. A later email change does not rewrite history, which for
+   * an audit trail is correct behaviour rather than a defect.
+   *
+   * Scanners never supply it — `reconcileFinding` refuses one from an adapter,
+   * exactly as it refuses a `statusReason`.
+   */
+  statusChangedBy?: string;
+
+  /**
    * Remediation text as reported by the scanner. Never synthesised: if the
    * scanner did not supply guidance this stays undefined and the UI says so.
    */

@@ -270,4 +270,32 @@ describe("reconcileFinding and human decisions", () => {
     expect(merged.statusReason).toBeUndefined();
     expect(merged.statusChangedAt).toBeUndefined();
   });
+
+  it("preserves the deciding email when a scan sees the finding again", () => {
+    const existing = finding({
+      status: "ACCEPTED_RISK",
+      statusReason: "Compensating control in the WAF, reviewed 2026-08-01.",
+      statusChangedAt: "2026-08-01T09:00:00.000Z",
+      statusChangedBy: "approver@example.com",
+    });
+
+    const { finding: merged } = reconcileFinding(
+      existing,
+      finding({ lastDetectedAt: "2026-08-12T00:00:00.000Z" }),
+    );
+
+    // Dropping this line lets the next scan erase attribution from a real risk
+    // acceptance.
+    expect(merged.statusChangedBy).toBe("approver@example.com");
+  });
+
+  it("refuses attribution supplied by a scanner adapter", () => {
+    const { finding: merged } = reconcileFinding(
+      undefined,
+      finding({ statusChangedBy: "attacker@example.com" }),
+    );
+
+    // Dropping this line lets a crafted scanner payload sign a decision.
+    expect(merged.statusChangedBy).toBeUndefined();
+  });
 });
