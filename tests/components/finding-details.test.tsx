@@ -34,6 +34,7 @@ describe("FindingDetails decision section", () => {
         onClose={() => {}}
         onApplyStatus={vi.fn()}
         onStatusChanged={vi.fn()}
+        canDecide
       />,
     );
 
@@ -82,6 +83,7 @@ describe("FindingDetails decision section", () => {
         onClose={() => {}}
         onApplyStatus={onApplyStatus}
         onStatusChanged={onStatusChanged}
+        canDecide
       />,
     );
 
@@ -117,6 +119,7 @@ describe("FindingDetails decision section", () => {
         onClose={() => {}}
         onApplyStatus={onApplyStatus}
         onStatusChanged={onStatusChanged}
+        canDecide
       />,
     );
 
@@ -138,5 +141,100 @@ describe("FindingDetails decision section", () => {
     render(<FindingDetails finding={finding()} onClose={() => {}} />);
 
     expect(screen.queryByLabelText(/change status to/i)).toBeNull();
+  });
+
+  it("locks the control for a viewer and says why", () => {
+    const onApplyStatus = vi.fn();
+
+    render(
+      <FindingDetails
+        finding={finding()}
+        onClose={() => {}}
+        onApplyStatus={onApplyStatus}
+        canDecide={false}
+      />,
+    );
+
+    expect(screen.getByLabelText(/change status to/i)).toBeDisabled();
+    expect(screen.getByRole("button", { name: /apply/i })).toBeDisabled();
+    expect(screen.getByText(/approver role is required/i)).toBeInTheDocument();
+    expect(onApplyStatus).not.toHaveBeenCalled();
+  });
+
+  it("gives an approver a working control", async () => {
+    const user = userEvent.setup();
+    const onApplyStatus = vi.fn().mockResolvedValue({
+      ok: true,
+      finding: finding({ status: "SUPPRESSED" }),
+    });
+
+    render(
+      <FindingDetails
+        finding={finding()}
+        onClose={() => {}}
+        onApplyStatus={onApplyStatus}
+        onStatusChanged={vi.fn()}
+        canDecide
+      />,
+    );
+
+    await user.selectOptions(
+      screen.getByLabelText(/change status to/i),
+      "SUPPRESSED",
+    );
+    await user.type(screen.getByLabelText(/reason/i), "Known noise.");
+    await user.click(screen.getByRole("button", { name: /apply/i }));
+
+    await waitFor(() =>
+      expect(onApplyStatus).toHaveBeenCalledWith(
+        "fnd_1",
+        "SUPPRESSED",
+        "Known noise.",
+      ),
+    );
+  });
+
+  it("shows who signed a decision", () => {
+    render(
+      <FindingDetails
+        finding={finding({
+          status: "ACCEPTED_RISK",
+          statusReason: "Compensating control documented in RISK-88.",
+          statusChangedAt: "2026-08-11T08:00:00.000Z",
+          statusChangedBy: "approver@example.com",
+        })}
+        onClose={() => {}}
+      />,
+    );
+
+    expect(screen.getByText(/approver@example\.com/)).toBeInTheDocument();
+  });
+
+  it("offers a way back in when the session expired mid-decision", async () => {
+    const user = userEvent.setup();
+    const onApplyStatus = vi.fn().mockResolvedValue({
+      ok: false,
+      code: "UNAUTHENTICATED",
+      message: "Your session has expired. Sign in again to continue.",
+    });
+
+    render(
+      <FindingDetails
+        finding={finding()}
+        onClose={() => {}}
+        onApplyStatus={onApplyStatus}
+        canDecide
+      />,
+    );
+
+    await user.selectOptions(
+      screen.getByLabelText(/change status to/i),
+      "SUPPRESSED",
+    );
+    await user.type(screen.getByLabelText(/reason/i), "Known noise.");
+    await user.click(screen.getByRole("button", { name: /apply/i }));
+
+    const link = await screen.findByRole("link", { name: /sign in/i });
+    expect(link).toHaveAttribute("href", "/login");
   });
 });

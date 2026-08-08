@@ -93,6 +93,7 @@ export function FindingsTable({
   initialSelected,
   initialState = DEFAULT_QUERY_STATE,
   setStatusAction,
+  canDecide = false,
 }: {
   initialResult: Page<SecurityFinding>;
   filterOptions: FilterOptions;
@@ -103,6 +104,8 @@ export function FindingsTable({
    * importing it keeps this component and its tests free of a server runtime.
    */
   setStatusAction?: SetFindingStatusAction;
+  /** Approver-only. Defaults to `false`; the action re-checks regardless. */
+  canDecide?: boolean;
 }) {
   const [state, setState] = useState<FindingsQueryState>(initialState);
   const [result, setResult] = useState(initialResult);
@@ -482,6 +485,7 @@ export function FindingsTable({
           onClose={() => setSelected(null)}
           onApplyStatus={setStatusAction}
           onStatusChanged={handleStatusChanged}
+          canDecide={canDecide}
         />
       )}
     </div>

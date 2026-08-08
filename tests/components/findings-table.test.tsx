@@ -361,6 +361,7 @@ describe("FindingsTable detail drawer", () => {
         initialResult={initialResult}
         filterOptions={filterOptions}
         setStatusAction={setStatusAction}
+        canDecide
       />,
     );
 
@@ -379,5 +380,35 @@ describe("FindingsTable detail drawer", () => {
     // The current query re-runs, so a finding that left the OPEN filter goes away.
     await waitFor(() => expect(fetchMock).toHaveBeenCalled());
     expect(refresh).toHaveBeenCalled();
+  });
+
+  it("passes the decision permission down to the drawer", async () => {
+    const user = userEvent.setup();
+
+    const { unmount } = render(
+      <FindingsTable
+        initialResult={initialResult}
+        filterOptions={filterOptions}
+        setStatusAction={vi.fn()}
+      />,
+    );
+
+    await user.click(screen.getByText("Hardcoded AWS access key"));
+    // No canDecide: a caller that did not ask the guard gets the locked control.
+    expect(screen.getByLabelText(/change status to/i)).toBeDisabled();
+
+    unmount();
+
+    render(
+      <FindingsTable
+        initialResult={initialResult}
+        filterOptions={filterOptions}
+        setStatusAction={vi.fn()}
+        canDecide
+      />,
+    );
+
+    await user.click(screen.getByText("Hardcoded AWS access key"));
+    expect(screen.getByLabelText(/change status to/i)).toBeEnabled();
   });
 });

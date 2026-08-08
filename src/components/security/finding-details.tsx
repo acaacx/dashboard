@@ -32,12 +32,19 @@ export function FindingDetails({
   onClose,
   onApplyStatus,
   onStatusChanged,
+  canDecide = false,
 }: {
   finding: SecurityFinding;
   onClose: () => void;
   /** Absent in read-only contexts; the decision form is then not rendered. */
   onApplyStatus?: SetFindingStatusAction;
   onStatusChanged?: (finding: SecurityFinding) => void;
+  /**
+   * Whether the signed-in user may decide. Defaults to `false`: this component
+   * cannot know who is looking, so a caller that did not ask the guard gets the
+   * locked control. The action re-checks regardless.
+   */
+  canDecide?: boolean;
 }) {
   const closeRef = useRef<HTMLButtonElement>(null);
 
@@ -198,10 +205,13 @@ export function FindingDetails({
                   <p className="text-ink-muted text-sm leading-relaxed break-words whitespace-pre-wrap">
                     {finding.statusReason}
                   </p>
-                  {finding.statusChangedAt && (
+                  {(finding.statusChangedAt || finding.statusChangedBy) && (
                     <p className="text-ink-faint mt-1.5 font-mono text-[10px]">
-                      {statusLabel(finding.status)} ·{" "}
-                      {formatDateTime(finding.statusChangedAt)}
+                      {statusLabel(finding.status)}
+                      {finding.statusChangedAt &&
+                        ` · ${formatDateTime(finding.statusChangedAt)}`}
+                      {finding.statusChangedBy &&
+                        ` · ${finding.statusChangedBy}`}
                     </p>
                   )}
                 </div>
@@ -212,6 +222,7 @@ export function FindingDetails({
                   finding={finding}
                   onApplyStatus={onApplyStatus}
                   onStatusChanged={onStatusChanged}
+                  locked={!canDecide}
                 />
               )}
             </Section>
@@ -281,16 +292,21 @@ function DecisionForm({
   finding,
   onApplyStatus,
   onStatusChanged,
+  locked,
 }: {
   finding: SecurityFinding;
   onApplyStatus: SetFindingStatusAction;
   onStatusChanged?: (finding: SecurityFinding) => void;
+  /** A viewer sees the control it cannot use, and the reason, rather than nothing. */
+  locked: boolean;
 }) {
   const targets = selectableTransitions(finding.status);
   const [target, setTarget] = useState<FindingStatus | "">("");
   const [reason, setReason] = useState("");
   const [pending, setPending] = useState(false);
-  const [error, setError] = useState<string | undefined>();
+  const [error, setError] = useState<
+    { code: string; message: string } | undefined
+  >();
 
   // Defensive: every current status yields at least one target today. This
   // guards a future edit to ALLOWED_MANUAL_TRANSITIONS.
@@ -298,7 +314,7 @@ function DecisionForm({
 
   const submit = async (event: React.FormEvent) => {
     event.preventDefault();
-    if (!target || pending) return;
+    if (locked || !target || pending) return;
 
     setPending(true);
     setError(undefined);
@@ -312,7 +328,7 @@ function DecisionForm({
     setPending(false);
 
     if (!result.ok) {
-      setError(result.message);
+      setError({ code: result.code, message: result.message });
       return;
     }
 
@@ -329,7 +345,7 @@ function DecisionForm({
         </span>
         <select
           value={target}
-          disabled={pending}
+          disabled={pending || locked}
           onChange={(event) =>
             setTarget(event.target.value as FindingStatus | "")
           }
@@ -352,22 +368,36 @@ function DecisionForm({
           value={reason}
           rows={3}
           maxLength={MAX_STATUS_REASON_LENGTH}
-          disabled={pending}
+          disabled={pending || locked}
           onChange={(event) => setReason(event.target.value)}
           placeholder="Why is this the right call? Required unless reopening."
           className="border-line bg-surface-raised text-ink placeholder:text-ink-faint focus:border-accent/50 w-full resize-y rounded border px-2 py-1.5 text-sm outline-none disabled:opacity-50"
         />
       </label>
 
+      {locked && (
+        <p className="text-ink-faint text-xs leading-relaxed">
+          Approver role is required to change a finding&rsquo;s status. Every
+          justification already recorded is visible above.
+        </p>
+      )}
+
       {error && (
         <p role="alert" className="text-fail text-xs">
-          {error}
+          {error.message}{" "}
+          {error.code === "UNAUTHENTICATED" && (
+            /* A full document load, not a next/link: an expired session needs
+               the server to redirect and set a fresh cookie. */
+            <a href="/login" className="text-accent underline">
+              Sign in
+            </a>
+          )}
         </p>
       )}
 
       <button
         type="submit"
-        disabled={pending || target === ""}
+        disabled={pending || locked || target === ""}
         className="border-line text-ink-muted hover:border-line-strong hover:text-ink rounded border px-2.5 py-1 font-mono text-[11px] transition-colors disabled:cursor-not-allowed disabled:opacity-40"
       >
         {pending ? "Applying…" : "Apply"}
