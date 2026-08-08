@@ -1,22 +1,60 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import {
   InvalidStatusReasonError,
   InvalidStatusTransitionError,
 } from "@/domain/security/errors";
+import { SESSION_COOKIE_NAME } from "@/lib/auth/cookie";
+import { getAuthService, resetAuthContainer } from "@/lib/auth/container";
+
+/**
+ * The security service is mocked — its behaviour has its own suite — but the
+ * session is real. Mocking the guard would assert that the action calls a mock,
+ * and the property under test is "a viewer cannot change a status".
+ */
 
 const setFindingStatus = vi.fn();
+let token: string | undefined;
 
-vi.mock("@/lib/security/container", () => ({
+// Partial: the auth container reads `configuredStorage()` from this same
+// module, so replacing the whole thing would leave the session store unbuildable.
+vi.mock("@/lib/security/container", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/lib/security/container")>()),
   getSecurityService: async () => ({ setFindingStatus }),
+}));
+
+vi.mock("next/headers", () => ({
+  cookies: async () => ({
+    get: (name: string) =>
+      name === SESSION_COOKIE_NAME && token ? { value: token } : undefined,
+  }),
 }));
 
 const { setFindingStatusAction } = await import(
   "@/app/dashboard/security/actions"
 );
 
-beforeEach(() => {
+const PASSWORD = "correct horse battery staple";
+
+async function signIn(email: string) {
+  ({ token } = await (await getAuthService()).authenticate(email, PASSWORD));
+}
+
+beforeEach(async () => {
   setFindingStatus.mockReset();
+  process.env.SECURITY_STORAGE = "memory";
+  resetAuthContainer();
+  token = undefined;
+
+  const service = await getAuthService();
+  await service.createUser("approver@example.com", PASSWORD, "APPROVER");
+  await service.createUser("viewer@example.com", PASSWORD, "VIEWER");
+  await signIn("approver@example.com");
+});
+
+afterEach(() => {
+  resetAuthContainer();
+  delete process.env.SECURITY_STORAGE;
 });
 
 describe("setFindingStatusAction", () => {
@@ -116,5 +154,65 @@ describe("setFindingStatusAction", () => {
       expect(result.message).not.toContain("ECONNREFUSED");
       expect(result.message).not.toContain("10.0.0.4");
     }
+  });
+
+  it("signs the decision with the session's email", async () => {
+    setFindingStatus.mockResolvedValue({ id: "fnd_1", status: "ACCEPTED_RISK" });
+
+    await setFindingStatusAction("fnd_1", "ACCEPTED_RISK", "Why.");
+
+    expect(setFindingStatus).toHaveBeenCalledWith(
+      "fnd_1",
+      "ACCEPTED_RISK",
+      "Why.",
+      { changedBy: "approver@example.com" },
+    );
+  });
+
+  it("refuses a viewer before the service is consulted", async () => {
+    await signIn("viewer@example.com");
+
+    const result = await setFindingStatusAction(
+      "fnd_1",
+      "ACCEPTED_RISK",
+      "Why.",
+    );
+
+    expect(result).toEqual({
+      ok: false,
+      code: "FORBIDDEN",
+      message: expect.any(String),
+    });
+    expect(setFindingStatus).not.toHaveBeenCalled();
+  });
+
+  it("refuses a request with no session", async () => {
+    token = undefined;
+
+    const result = await setFindingStatusAction(
+      "fnd_1",
+      "ACCEPTED_RISK",
+      "Why.",
+    );
+
+    expect(result).toEqual({
+      ok: false,
+      code: "UNAUTHENTICATED",
+      message: expect.any(String),
+    });
+    expect(setFindingStatus).not.toHaveBeenCalled();
+  });
+
+  it("refuses a revoked session, so signing out ends the ability to decide", async () => {
+    await (await getAuthService()).signOut(token!);
+
+    const result = await setFindingStatusAction(
+      "fnd_1",
+      "ACCEPTED_RISK",
+      "Why.",
+    );
+
+    expect(result).toMatchObject({ ok: false, code: "UNAUTHENTICATED" });
+    expect(setFindingStatus).not.toHaveBeenCalled();
   });
 });
