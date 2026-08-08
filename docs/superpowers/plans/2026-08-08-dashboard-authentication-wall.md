@@ -87,7 +87,7 @@ Auth gets its own composition root rather than joining `src/lib/security/contain
 - Consumes: nothing.
 - Produces: `User`, `SessionUser`, `UserRole`, `USER_ROLES`, `isUserRole`, `toSessionUser`, `Session`, `SESSION_TTL_MS`, `MAX_LOGIN_ATTEMPTS`, `LOGIN_WINDOW_MS`, `AuthDomainError`, `InvalidCredentialsError`, `TooManyAttemptsError`, `DuplicateUserError`, `UserNotFoundError`, `WeakPasswordError`, `isAuthDomainError`.
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 `tests/auth/schema.test.ts`:
 
@@ -160,12 +160,12 @@ if (!TEST_DATABASE_URL) {
 }
 ```
 
-- [ ] **Step 2: Run test to verify it fails**
+- [x] **Step 2: Run test to verify it fails**
 
 Run: `npx vitest run tests/auth/schema.test.ts`
 Expected: FAIL — `relation "users" does not exist`.
 
-- [ ] **Step 3: Write the migration**
+- [x] **Step 3: Write the migration**
 
 `db/migrations/003_auth.sql`:
 
@@ -218,7 +218,7 @@ CREATE TABLE IF NOT EXISTS login_attempts (
 );
 ```
 
-- [ ] **Step 4: Write the domain types**
+- [x] **Step 4: Write the domain types**
 
 `src/domain/auth/user.ts`:
 
@@ -381,17 +381,17 @@ export function isAuthDomainError(error: unknown): error is AuthDomainError {
 }
 ```
 
-- [ ] **Step 5: Run test to verify it passes**
+- [x] **Step 5: Run test to verify it passes**
 
 Run: `npx vitest run tests/auth/schema.test.ts`
 Expected: PASS, 3 tests.
 
-- [ ] **Step 6: Full gate**
+- [x] **Step 6: Full gate**
 
 Run: `npm run lint && npm run typecheck && npm test`
 Expected: all pass. Test count rises by 3.
 
-- [ ] **Step 7: Commit**
+- [x] **Step 7: Commit**
 
 ```bash
 git add db/migrations/003_auth.sql src/domain/auth tests/auth/schema.test.ts
@@ -410,7 +410,7 @@ git commit -m "feat: add auth schema and domain types"
 - Consumes: `WeakPasswordError` from `@/domain/auth/errors`.
 - Produces: `MIN_PASSWORD_LENGTH: number`, `hashPassword(password: string): Promise<string>`, `verifyPassword(password: string, stored: string): Promise<boolean>`, `burnDummyVerify(password: string): Promise<void>`.
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 `tests/auth/password.test.ts`:
 
@@ -476,12 +476,12 @@ describe("password hashing", () => {
 });
 ```
 
-- [ ] **Step 2: Run test to verify it fails**
+- [x] **Step 2: Run test to verify it fails**
 
 Run: `npx vitest run tests/auth/password.test.ts`
 Expected: FAIL — cannot resolve `@/lib/auth/password`.
 
-- [ ] **Step 3: Write the implementation**
+- [x] **Step 3: Write the implementation**
 
 `src/lib/auth/password.ts`:
 
@@ -596,12 +596,12 @@ export async function burnDummyVerify(password: string): Promise<void> {
 }
 ```
 
-- [ ] **Step 4: Run test to verify it passes**
+- [x] **Step 4: Run test to verify it passes**
 
 Run: `npx vitest run tests/auth/password.test.ts`
 Expected: PASS, 9 tests.
 
-- [ ] **Step 5: Full gate and commit**
+- [x] **Step 5: Full gate and commit**
 
 ```bash
 npm run lint && npm run typecheck && npm test
@@ -631,7 +631,7 @@ git commit -m "feat: hash passwords with scrypt from node:crypto"
   - `InMemoryUserRepository`, `InMemorySessionRepository`
   - `runAuthRepositoryContract(name, factory)` from the test contract module
 
-- [ ] **Step 1: Write the contract suite**
+- [x] **Step 1: Write the contract suite**
 
 `tests/repository/auth-repository-contract.ts`:
 
@@ -892,12 +892,12 @@ runAuthRepositoryContract("in-memory", {
 });
 ```
 
-- [ ] **Step 2: Run to verify it fails**
+- [x] **Step 2: Run to verify it fails**
 
 Run: `npx vitest run tests/repository/memory-auth-repository.test.ts`
 Expected: FAIL — cannot resolve `@/lib/auth/repository/memory-user-repository`.
 
-- [ ] **Step 3: Write the interfaces**
+- [x] **Step 3: Write the interfaces**
 
 `src/lib/auth/repository/user-repository.ts`:
 
@@ -971,7 +971,7 @@ export interface SessionRepository {
 }
 ```
 
-- [ ] **Step 4: Write the in-memory implementations**
+- [x] **Step 4: Write the in-memory implementations**
 
 `src/lib/auth/repository/memory-user-repository.ts`:
 
@@ -1161,12 +1161,12 @@ export class InMemorySessionRepository implements SessionRepository {
 }
 ```
 
-- [ ] **Step 5: Run test to verify it passes**
+- [x] **Step 5: Run test to verify it passes**
 
 Run: `npx vitest run tests/repository/memory-auth-repository.test.ts`
 Expected: PASS, 22 tests — 9 user, 7 session, 6 throttle.
 
-- [ ] **Step 6: Full gate and commit**
+- [x] **Step 6: Full gate and commit**
 
 ```bash
 npm run lint && npm run typecheck && npm test
@@ -1187,7 +1187,7 @@ git commit -m "feat: add auth repositories with an in-memory driver"
 - Consumes: `UserRepository`, `SessionRepository`, `CreateUserInput`, `CreateSessionInput` from Task 3; `query`/`getPool` from `@/lib/db/pool`; `withRetry` from `@/lib/db/retry`.
 - Produces: `PostgresUserRepository`, `PostgresSessionRepository`. Both take an optional `Pool` as their only constructor argument and default to the shared pool, matching `PostgresSecurityFindingRepository`.
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 `tests/repository/postgres-auth-repository.test.ts`:
 
@@ -1237,12 +1237,12 @@ if (!TEST_DATABASE_URL) {
 }
 ```
 
-- [ ] **Step 2: Run to verify it fails**
+- [x] **Step 2: Run to verify it fails**
 
 Run: `npx vitest run tests/repository/postgres-auth-repository.test.ts`
 Expected: FAIL — cannot resolve `@/lib/auth/repository/postgres-user-repository`.
 
-- [ ] **Step 3: Write the user store**
+- [x] **Step 3: Write the user store**
 
 `src/lib/auth/repository/postgres-user-repository.ts`:
 
@@ -1371,7 +1371,7 @@ export class PostgresUserRepository implements UserRepository {
 }
 ```
 
-- [ ] **Step 4: Write the session store**
+- [x] **Step 4: Write the session store**
 
 `src/lib/auth/repository/postgres-session-repository.ts`:
 
@@ -1511,14 +1511,14 @@ export class PostgresSessionRepository implements SessionRepository {
 }
 ```
 
-- [ ] **Step 5: Run test to verify it passes**
+- [x] **Step 5: Run test to verify it passes**
 
 Run: `npx vitest run tests/repository/postgres-auth-repository.test.ts`
 Expected: PASS, 22 tests — the same contract the memory driver passes.
 
 If any assertion differs between the two drivers, **fix the implementation, not the contract.** The contract is the specification.
 
-- [ ] **Step 6: Full gate and commit**
+- [x] **Step 6: Full gate and commit**
 
 ```bash
 npm run lint && npm run typecheck && npm test
@@ -1544,7 +1544,7 @@ git commit -m "feat: add the PostgreSQL auth stores"
   - `listUsers(): Promise<User[]>`, `setRole(email, role)`, `removeUser(email)`, `userCount()`
   - `hashToken(token: string): string` exported as a module function
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 `tests/services/auth-service.test.ts`:
 
@@ -1682,12 +1682,12 @@ describe("AuthService", () => {
 });
 ```
 
-- [ ] **Step 2: Run to verify it fails**
+- [x] **Step 2: Run to verify it fails**
 
 Run: `npx vitest run tests/services/auth-service.test.ts`
 Expected: FAIL — cannot resolve `@/lib/auth/services/auth-service`.
 
-- [ ] **Step 3: Write the implementation**
+- [x] **Step 3: Write the implementation**
 
 `src/lib/auth/services/auth-service.ts`:
 
@@ -1816,12 +1816,12 @@ export class AuthService {
 }
 ```
 
-- [ ] **Step 4: Run test to verify it passes**
+- [x] **Step 4: Run test to verify it passes**
 
 Run: `npx vitest run tests/services/auth-service.test.ts`
 Expected: PASS, 13 tests.
 
-- [ ] **Step 5: Full gate and commit**
+- [x] **Step 5: Full gate and commit**
 
 ```bash
 npm run lint && npm run typecheck && npm test
@@ -1850,7 +1850,7 @@ git commit -m "feat: add the auth service"
   - `safeNextPath(value: string | null | undefined): string`
   - `getAuthContainer(): Promise<AuthContainer>`, `getAuthService(): Promise<AuthService>`, `resetAuthContainer(): void`
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 `tests/auth/cookie.test.ts`:
 
@@ -1958,12 +1958,12 @@ describe("safeNextPath", () => {
 });
 ```
 
-- [ ] **Step 2: Run to verify they fail**
+- [x] **Step 2: Run to verify they fail**
 
 Run: `npx vitest run tests/auth/cookie.test.ts tests/auth/safe-next.test.ts`
 Expected: FAIL — modules do not resolve.
 
-- [ ] **Step 3: Write the implementations**
+- [x] **Step 3: Write the implementations**
 
 `src/lib/auth/cookie.ts`:
 
@@ -2138,12 +2138,12 @@ export async function getAuthService(): Promise<AuthService> {
 }
 ```
 
-- [ ] **Step 4: Run tests to verify they pass**
+- [x] **Step 4: Run tests to verify they pass**
 
 Run: `npx vitest run tests/auth/cookie.test.ts tests/auth/safe-next.test.ts`
 Expected: PASS, 12 tests.
 
-- [ ] **Step 5: Full gate and commit**
+- [x] **Step 5: Full gate and commit**
 
 ```bash
 npm run lint && npm run typecheck && npm test
@@ -2169,7 +2169,7 @@ git commit -m "feat: add session cookie handling and the auth container"
 
 **Note on the two entry points:** `protectedRoute` reads the raw `Cookie` header off the `Request`, so a route test can call the handler with a plain `Request` and no Next runtime. `getSessionUser`/`requireUser` use `next/headers` because a server component has no `Request` to read.
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 `tests/auth/guards.test.ts`:
 
@@ -2281,12 +2281,12 @@ describe("route guards", () => {
 });
 ```
 
-- [ ] **Step 2: Run to verify it fails**
+- [x] **Step 2: Run to verify it fails**
 
 Run: `npx vitest run tests/auth/guards.test.ts`
 Expected: FAIL — cannot resolve `@/lib/auth/guards`.
 
-- [ ] **Step 3: Write the implementation**
+- [x] **Step 3: Write the implementation**
 
 `src/lib/auth/guards.ts`:
 
@@ -2392,14 +2392,14 @@ export async function requireUser(): Promise<SessionUser> {
 }
 ```
 
-- [ ] **Step 4: Run test to verify it passes**
+- [x] **Step 4: Run test to verify it passes**
 
 Run: `npx vitest run tests/auth/guards.test.ts`
 Expected: PASS, 6 tests.
 
 If the `next/headers` import makes the file fail to load under Vitest, note that the test only exercises `getSessionUserFromRequest` and `protectedRoute` — neither touches `cookies()`. If the module-level import itself throws in the test environment, move `cookies` to a dynamic `await import("next/headers")` inside `getSessionUser` and re-run.
 
-- [ ] **Step 5: Full gate and commit**
+- [x] **Step 5: Full gate and commit**
 
 ```bash
 npm run lint && npm run typecheck && npm test
@@ -2422,7 +2422,7 @@ git commit -m "feat: add structural route and page guards"
 - Consumes: `getAuthService`, `buildSessionCookie`, `buildClearedSessionCookie`, `SESSION_COOKIE_NAME`, `safeNextPath`, `isAuthDomainError`.
 - Produces: `type SignInState = { error?: string }`, `signInAction(previous: SignInState, formData: FormData): Promise<SignInState>`, `signOutAction(): Promise<void>`.
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 `tests/actions/sign-in-action.test.ts`:
 
@@ -2537,12 +2537,12 @@ describe("signInAction", () => {
 });
 ```
 
-- [ ] **Step 2: Run to verify it fails**
+- [x] **Step 2: Run to verify it fails**
 
 Run: `npx vitest run tests/actions/sign-in-action.test.ts`
 Expected: FAIL — cannot resolve `@/app/login/actions`.
 
-- [ ] **Step 3: Write the shared state type**
+- [x] **Step 3: Write the shared state type**
 
 `src/app/login/form-state.ts`:
 
@@ -2559,7 +2559,7 @@ export interface SignInState {
 }
 ```
 
-- [ ] **Step 4: Write the actions**
+- [x] **Step 4: Write the actions**
 
 `src/app/login/actions.ts`:
 
@@ -2668,7 +2668,7 @@ async function setRawCookie(setCookie: string): Promise<void> {
 }
 ```
 
-- [ ] **Step 5: Write the form and page**
+- [x] **Step 5: Write the form and page**
 
 `src/app/login/login-form.tsx`:
 
@@ -2789,12 +2789,12 @@ export default async function LoginPage({ searchParams }: PageProps<"/login">) {
 }
 ```
 
-- [ ] **Step 6: Run test to verify it passes**
+- [x] **Step 6: Run test to verify it passes**
 
 Run: `npx vitest run tests/actions/sign-in-action.test.ts`
 Expected: PASS, 8 tests.
 
-- [ ] **Step 7: Full gate and commit**
+- [x] **Step 7: Full gate and commit**
 
 ```bash
 npm run lint && npm run typecheck && npm test
@@ -2820,7 +2820,7 @@ git commit -m "feat: add the login page and sign-in action"
 
 **These four routes have no tests today.** Nothing under `tests/` imports a handler from `src/app/api/`; the component suites stub global `fetch`. So this task writes the first ones, and they are what proves the wrapper preserves each route's behavior rather than merely refusing anonymous callers.
 
-- [ ] **Step 1: Write the test helper**
+- [x] **Step 1: Write the test helper**
 
 `tests/helpers/session.ts`:
 
@@ -2861,7 +2861,7 @@ export function clearMemoryAuth(): void {
 }
 ```
 
-- [ ] **Step 2: Write the failing test**
+- [x] **Step 2: Write the failing test**
 
 `tests/api/protected-routes.test.ts`:
 
@@ -2951,12 +2951,12 @@ describe("protected API routes", () => {
 });
 ```
 
-- [ ] **Step 3: Run to verify it fails**
+- [x] **Step 3: Run to verify it fails**
 
 Run: `npx vitest run tests/api/protected-routes.test.ts`
 Expected: FAIL — anonymous requests currently return 200, not 401.
 
-- [ ] **Step 4: Wrap the handlers**
+- [x] **Step 4: Wrap the handlers**
 
 For `src/app/api/security/statistics/route.ts`, change the export and add the import. Everything inside the function body stays exactly as it is:
 
@@ -3000,12 +3000,12 @@ export const GET = protectedRoute<{ params: Promise<{ id: string }> }>(
 
 Open the file first and match the shape the existing handler already declares for its second argument — if it uses `{ params: Promise<{ findingId: string }> }`, use that. `protectedRoute` forwards Next's context object through untouched as `routeContext`.
 
-- [ ] **Step 5: Run test to verify it passes**
+- [x] **Step 5: Run test to verify it passes**
 
 Run: `npx vitest run tests/api/protected-routes.test.ts`
 Expected: PASS, 8 tests.
 
-- [ ] **Step 6: Full gate and commit**
+- [x] **Step 6: Full gate and commit**
 
 ```bash
 npm run lint && npm run typecheck && npm test
@@ -3030,7 +3030,7 @@ git commit -m "feat: require a session for the read APIs"
 - Consumes: `requireUser` from `@/lib/auth/guards`, `signOutAction` from `@/app/login/actions`.
 - Produces: `proxy(request: NextRequest): NextResponse` and `config` from `src/proxy.ts`.
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 `tests/auth/proxy.test.ts`:
 
@@ -3077,12 +3077,12 @@ describe("proxy", () => {
 });
 ```
 
-- [ ] **Step 2: Run to verify it fails**
+- [x] **Step 2: Run to verify it fails**
 
 Run: `npx vitest run tests/auth/proxy.test.ts`
 Expected: FAIL — cannot resolve `@/proxy`.
 
-- [ ] **Step 3: Write the proxy**
+- [x] **Step 3: Write the proxy**
 
 `src/proxy.ts`:
 
@@ -3131,7 +3131,7 @@ export const config = {
 };
 ```
 
-- [ ] **Step 4: Gate the layout and pages**
+- [x] **Step 4: Gate the layout and pages**
 
 In `src/app/dashboard/layout.tsx`, add the import and the call, and render the signed-in identity with a sign-out control:
 
@@ -3192,12 +3192,12 @@ import { requireUser } from "@/lib/auth/guards";
   await requireUser();
 ```
 
-- [ ] **Step 5: Run test to verify it passes**
+- [x] **Step 5: Run test to verify it passes**
 
 Run: `npx vitest run tests/auth/proxy.test.ts`
 Expected: PASS, 4 tests.
 
-- [ ] **Step 6: Full gate and commit**
+- [x] **Step 6: Full gate and commit**
 
 ```bash
 npm run lint && npm run typecheck && npm test && npm run build
@@ -3219,7 +3219,7 @@ git commit -m "feat: put the dashboard behind a session"
 
 **Why this exists:** the CLI is a separate process, so against the memory driver it writes to a store the server cannot see. Without seeding, adding authentication makes `npm run dev` unusable — locked out with no way to create an account.
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 `tests/auth/dev-seed.test.ts`:
 
@@ -3297,12 +3297,12 @@ describe("development account seeding", () => {
 });
 ```
 
-- [ ] **Step 2: Run to verify it fails**
+- [x] **Step 2: Run to verify it fails**
 
 Run: `npx vitest run tests/auth/dev-seed.test.ts`
 Expected: FAIL — `devAccount` does not exist.
 
-- [ ] **Step 3: Add seeding to the container**
+- [x] **Step 3: Add seeding to the container**
 
 In `src/lib/auth/container.ts`, extend the interface and `buildContainer`:
 
@@ -3375,12 +3375,12 @@ Add `import { randomBytes } from "node:crypto";` at the top, and at the end of `
   return container;
 ```
 
-- [ ] **Step 4: Run test to verify it passes**
+- [x] **Step 4: Run test to verify it passes**
 
 Run: `npx vitest run tests/auth/dev-seed.test.ts`
 Expected: PASS, 5 tests.
 
-- [ ] **Step 5: Full gate and commit**
+- [x] **Step 5: Full gate and commit**
 
 ```bash
 npm run lint && npm run typecheck && npm test
@@ -3403,7 +3403,7 @@ git commit -m "feat: seed a development account so zero setup still works"
 
 **Design note:** the script duplicates the scrypt format rather than importing `src/lib/auth/password.ts`, because that module resolves through the `@/` alias and TypeScript. A test asserts the two agree — a password hashed by the CLI must verify through the application, or provisioning silently produces accounts nobody can use.
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 `tests/auth/user-cli.test.ts`:
 
@@ -3525,12 +3525,12 @@ if (!TEST_DATABASE_URL) {
 }
 ```
 
-- [ ] **Step 2: Run to verify it fails**
+- [x] **Step 2: Run to verify it fails**
 
 Run: `npx vitest run tests/auth/user-cli.test.ts`
 Expected: FAIL — `scripts/user.mjs` does not exist.
 
-- [ ] **Step 3: Write the script**
+- [x] **Step 3: Write the script**
 
 `scripts/user.mjs`:
 
@@ -3751,7 +3751,7 @@ main().catch((error) => {
 });
 ```
 
-- [ ] **Step 4: Register the script**
+- [x] **Step 4: Register the script**
 
 In `package.json`, add to `scripts`:
 
@@ -3759,12 +3759,12 @@ In `package.json`, add to `scripts`:
     "user": "node scripts/user.mjs"
 ```
 
-- [ ] **Step 5: Run test to verify it passes**
+- [x] **Step 5: Run test to verify it passes**
 
 Run: `npx vitest run tests/auth/user-cli.test.ts`
 Expected: PASS, 7 tests.
 
-- [ ] **Step 6: Full gate and commit**
+- [x] **Step 6: Full gate and commit**
 
 ```bash
 npm run lint && npm run typecheck && npm test
@@ -3785,7 +3785,7 @@ git commit -m "feat: add the account provisioning CLI"
 - Consumes: everything above.
 - Produces: nothing code depends on.
 
-- [ ] **Step 1: Update `.env.example`**
+- [x] **Step 1: Update `.env.example`**
 
 Add after the "Scan ingestion" block:
 
@@ -3805,7 +3805,7 @@ Add after the "Scan ingestion" block:
 # NODE_ENV=production.
 ```
 
-- [ ] **Step 2: Update `README.md`**
+- [x] **Step 2: Update `README.md`**
 
 Add an "Authentication" section covering: how to create the first account, what the dev seed does and when it refuses, the two roles and the fact that roles are recorded but not yet enforced, that logout is real revocation, and the 12-hour absolute session lifetime.
 
@@ -3824,7 +3824,7 @@ In "Known limitations", **remove** the entry beginning "Anyone who can reach the
 
 Update the test counts in the storage section to the numbers this plan actually produces — run `npm test` twice, once with `TEST_DATABASE_URL` and once without, and record both.
 
-- [ ] **Step 3: Update `CLAUDE.md`**
+- [x] **Step 3: Update `CLAUDE.md`**
 
 Under "Traps", add:
 
@@ -3843,7 +3843,7 @@ Under "Traps", add:
   r=8 exceeds Node's 32 MB default `maxmem` and throws at runtime.
 ```
 
-- [ ] **Step 4: Live verification**
+- [x] **Step 4: Live verification**
 
 Start the dev server, then walk the whole path by hand. Do not skip this — none of the tests above exercise a real browser session.
 
@@ -3862,7 +3862,7 @@ Confirm, in order:
 7. Sign out returns to `/login`, and `/dashboard` redirects again.
 8. A wrong password ten times produces the throttle message, and the correct password is still refused until the window passes.
 
-- [ ] **Step 5: Full gate and commit**
+- [x] **Step 5: Full gate and commit**
 
 ```bash
 export TEST_DATABASE_URL=postgres://postgres:postgres@localhost:5433/dashboard_test
