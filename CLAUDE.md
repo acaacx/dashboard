@@ -89,6 +89,21 @@ npm run lint && npm run typecheck && npm test && npm run build
   ones. Mock keys are assembled at runtime in `mock-scan-payloads.ts`.
 - Mock data is tuned to hit exactly 23 open / 3 critical / 7 high / 13 medium /
   0 low. Changing the payloads changes those headline numbers.
+- **`src/proxy.ts` is not a security boundary.** It checks that a session cookie
+  exists, never that it is valid. Next's own docs warn that a matcher change
+  silently drops Server Function coverage, so every boundary validates for
+  itself — `requireUser()` in the layout *and* in each page, `protectedRoute()`
+  on each API route. A page that only inherits the layout check is reachable by
+  client-side navigation.
+- **The scrypt parameters are duplicated in `scripts/user.mjs`.** The CLI runs
+  outside TypeScript and cannot import `src/lib/auth/password.ts`. If you change
+  N, r or p in one, change both — `tests/auth/user-cli.test.ts` asserts a
+  CLI-written hash verifies through the application.
+- **N is 16384 on purpose.** scrypt uses roughly N * r * 128 bytes; N=32768 with
+  r=8 exceeds Node's 32 MB default `maxmem` and throws at runtime.
+- **`server-only` is aliased to a no-op in `vitest.config.mts`.** Vitest sets
+  neither React condition, so the real module throws on import. Without the
+  alias, no test can import the auth container or guards.
 
 ## Not implemented on purpose
 

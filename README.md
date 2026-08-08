@@ -566,24 +566,95 @@ imports it.
 
 ---
 
+## Authentication
+
+Every dashboard page and every read API is behind a login. The one exception is
+`POST /api/security/scans`, which keeps its bearer token so CI can ingest scans
+without holding a session.
+
+### Creating the first account
+
+There is no self-signup. On a dashboard listing exploitable vulnerabilities,
+anyone who could reach the login page could otherwise grant themselves access —
+so accounts are provisioned from the command line.
+
+```bash
+npm run db:migrate
+npm run user -- create --email you@example.com --role approver
+```
+
+The password is prompted on stdin with echo disabled, never taken as a flag:
+argv is visible in `ps` and lands in shell history. Minimum length is 12
+characters, with no composition rules.
+
+```bash
+npm run user -- list
+npm run user -- role --email you@example.com --role viewer
+npm run user -- delete --email them@example.com
+```
+
+The CLI talks to Postgres directly, so it needs `DATABASE_URL`. It refuses to
+run without one: it is a separate process from the server, so against the
+in-memory driver it would write to a store the server cannot see.
+
+### The development account
+
+With no `DATABASE_URL` — the zero-setup default — the server seeds a single
+`dev@localhost` approver on boot and prints its randomly generated password to
+the server log. The password is new on every boot, so nothing fixed can survive
+into a deployment.
+
+Seeding is refused outright when `NODE_ENV=production`, when the storage driver
+is Postgres, when `SECURITY_DATA_SOURCE=live`, and when any account already
+exists.
+
+### How sessions work
+
+Passwords are hashed with `scrypt` from `node:crypto` — no new dependency — and
+stored as self-describing `scrypt$N$r$p$salt$hash` strings, so cost parameters
+can be raised later without invalidating existing rows.
+
+A session is a **row**, not a signed cookie. The cookie carries 32 bytes of
+random token; the database stores only its SHA-256. That means two things: a
+dump of the session table yields nothing usable, and **logout is real
+revocation** — the row is deleted, so a copied cookie stops working instantly
+rather than remaining valid until it expires.
+
+Session lifetime is an absolute **12 hours** with no sliding renewal. Failed
+logins are throttled at **10 attempts per 15 minutes per email**, counted
+whether or not that account exists — a wrong password and an unknown email give
+the identical message and spend comparable time, so neither is an
+account-enumeration oracle.
+
+### Roles
+
+Accounts are `VIEWER` or `APPROVER`. The role is recorded and settable, but
+**nothing reads it to make a decision yet** — any signed-in account can still
+change a finding's status. Enforcement, and recording who made a decision, land
+with the second half of this work.
+
+---
+
 ## Testing
 
 ```bash
 npm test
 ```
 
-297 tests without a database; 349 with one.
+384 tests without a database; 468 with one.
 
 Covering adapters (all four, native JSON and SARIF), the SARIF parser, severity
 and category normalization, fingerprint determinism, deduplication, the finding
 lifecycle, statistics and trend calculation, scanner health, the SQL builders,
 and the findings table's rendering, filters and detail drawer.
 
-**The repository contract suite is the important one.** The same 46 assertions
-run against both the in-memory and the PostgreSQL store, covering the awkward
-cases — NULL handling in filters, LIKE-metacharacter escaping, page clamping,
-tiebreak ordering, MTTR being undefined rather than zero. If the two drivers ever
-diverge, that suite fails.
+**The repository contract suites are the important ones.** The same 46 findings
+assertions run against both the in-memory and the PostgreSQL store, covering the
+awkward cases — NULL handling in filters, LIKE-metacharacter escaping, page
+clamping, tiebreak ordering, MTTR being undefined rather than zero. A second
+contract suite does the same for the 22 auth-store assertions: email case
+folding, session expiry boundaries, cascade on user deletion, and a throttle
+window that reopens. If the two drivers ever diverge, those suites fail.
 
 To include the Postgres suites:
 
@@ -623,9 +694,14 @@ interactive state — so a coloured pixel always means something. Motion respect
   sustained outage means every request pays the full retry budget before failing.
 - GitHub and Azure providers are declared and stubbed, not implemented; pages
   that would use them say so rather than showing placeholder data.
-- Anyone who can reach the dashboard can change a finding's status. There is no
-  user authentication, so decisions are recorded with a justification but no
-  author.
+- Roles are recorded but not yet enforced: any signed-in account can change a
+  finding's status, and no author is recorded on the decision. Both land with
+  the second half of the authentication work.
+- With the in-memory driver, accounts and sessions do not survive a restart, so
+  the dashboard reseeds a development account on each boot. Authentication on
+  the memory driver is a development convenience; a deployment means Postgres.
+- The login throttle is a fixed window per email. On the memory driver its
+  counter resets when the process restarts.
 - Line-number-based fingerprints churn on unrelated edits where a scanner
   provides no stable id.
 - Scan ingestion is authenticated but not rate-limited.
