@@ -303,13 +303,17 @@ export class SecurityService {
    * Invalid transitions are rejected rather than silently applied, and the three
    * human-decided statuses require a justification: an accepted risk with no
    * recorded reason is not auditable, which is the whole point of the status.
+   *
+   * `options.changedBy` is the deciding user's email, snapshotted onto the
+   * finding. The caller supplies it from the session; the service never guesses.
    */
   async setFindingStatus(
     id: string,
     status: FindingStatus,
     reason: string | undefined,
-    now: Date = new Date(),
+    options: { changedBy?: string; now?: Date } = {},
   ): Promise<SecurityFinding | null> {
+    const now = options.now ?? new Date();
     const finding = await this.findings.findById(id);
     if (!finding) return null;
     // A no-op transition must not become a way to rewrite an existing
@@ -345,6 +349,9 @@ export class SecurityService {
       // for a status the finding no longer holds reads as a current decision.
       statusReason,
       statusChangedAt: now.toISOString(),
+      // Attribution belongs to the change, not to the justification: this is
+      // who made the change `statusChangedAt` timestamps.
+      statusChangedBy: options.changedBy,
     });
   }
 }
