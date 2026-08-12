@@ -62,10 +62,12 @@ export function FindingDetails({
     | { kind: "loaded"; decisions: FindingDecision[] }
   >({ kind: "loading" });
 
+  // No synchronous "loading" reset here: the initial state covers the first
+  // render, and on a refetch the previous timeline stays visible until the
+  // fresh one arrives, rather than flashing a loading line.
   useEffect(() => {
     if (!loadHistory) return;
     let cancelled = false;
-    setHistory({ kind: "loading" });
     loadHistory(finding.id).then(
       (decisions) => {
         if (!cancelled) setHistory({ kind: "loaded", decisions });

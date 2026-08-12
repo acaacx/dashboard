@@ -214,6 +214,26 @@ Only an `APPROVER` may decide. A viewer sees the control disabled with the
 reason, and `setFindingStatusAction` re-checks the role regardless of what the
 drawer rendered.
 
+### Decision history
+
+Every human status change is also appended to `finding_decisions`: who moved
+the finding, from which status to which, when, and the justification. The
+write is atomic with the status change — one transaction, both or neither.
+The drawer shows the trail newest-first.
+
+What is *not* recorded, on purpose:
+
+- Scanner-driven transitions (auto-resolve, reopen-by-scan). No person made
+  them; `firstDetectedAt`, `resolvedAt` and the trend data describe the
+  machine's side.
+- Decisions taken before this feature shipped. They were not backfilled — the
+  drawer says "Earlier decisions were not recorded." rather than showing a
+  synthesized row.
+
+History is append-only at the interface level: neither storage driver exposes
+an update or delete for decisions. Reading the trail requires a session but no
+role; writing decisions still requires `APPROVER`.
+
 ---
 
 ## Deduplication
@@ -319,6 +339,7 @@ scheme-checked (`http:`/`https:` only) before becoming a link, so a
 |---|---|
 | `GET /api/security/findings` | Paginated, filtered findings |
 | `GET /api/security/findings/:id` | One finding |
+| `GET /api/security/findings/:id/history` | The finding's decision trail, newest first |
 | `GET /api/security/statistics` | Aggregates + trend + scanner health |
 | `GET /api/security/scans` | Scan runs + scanner health |
 | `POST /api/security/scans` | Ingest scanner output (authenticated) |
@@ -465,6 +486,7 @@ rollback machinery to misunderstand.
 |---|---|
 | `security_findings` | one row per normalized finding, keyed by `fingerprint` |
 | `scan_runs` | one row per scanner execution; scanner health is derived from these |
+| `finding_decisions` | append-only trail of human status decisions |
 | `schema_migrations` | applied migration versions |
 
 `fingerprint` is the **primary key**, so
