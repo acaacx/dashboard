@@ -1,141 +1,204 @@
 # Handoff
 
-Updated 2026-08-08.
+Updated 2026-08-12.
 
 ## What we were doing
 
-Implementing the spec
-`docs/superpowers/specs/2026-08-08-dashboard-authentication-design.md` —
-authentication and decision attribution for the DevSecOps dashboard — split into
-two plans.
+Brainstorming a spec for **decision history** — an append-only audit trail of who
+changed a finding's status, when, and why. Running
+`superpowers:brainstorming`, currently at checklist step 5 (present the design).
 
-**Both plans are complete, verified and pushed. There is no work in flight.**
+**Nothing is implemented. No spec file exists yet.** The design has been agreed
+in conversation and is recorded in full below so it does not have to be
+rediscovered.
 
-## State: the whole spec has shipped
+## State: auth shipped, decision history designed but not written down
 
-`main` at `380e14f`, working tree clean, in sync with `origin/main` (nothing
-unpushed). The spec reads `**Status:** implemented (plan 1 2026-08-08, plan 2
-2026-08-08)`. Both plan files have every task checkbox ticked — the single
-remaining `- [ ]` in the roles plan is line 3's boilerplate sub-skill notice, not
-a task.
+`main` at `c876a42`, working tree clean, in sync with `origin/main`.
 
-Plan 1 — the wall (18 commits, `cb97b06..b9ff916`): local accounts with `scrypt`,
-server-side revocable sessions, login/logout, every dashboard page and read API
-behind a session, the provisioning CLI, dev-account seeding.
-
-Plan 2 — roles and attribution (7 commits, `b9ff916..380e14f`):
-
-```
-380e14f docs: document roles and decision attribution
-67dbdc1 feat: show a decision's author and lock a viewer's control
-1be5c51 feat: require an approver to change a finding's status
-16fb7d4 feat: add the approver guard
-5ee6fa2 feat: record the deciding user on a status change
-ffb127c feat: store who decided a finding's status
-59817c2 feat: carry the deciding user through the finding lifecycle
-```
-
-What plan 2 added: `statusChangedBy` on `SecurityFinding`, threaded through both
-`reconcileFinding` paths; migration `db/migrations/004_status_changed_by.sql` and
-the column in the PostgreSQL finding repository; `requireApprover()` in
-`src/lib/auth/guards.ts` with `isApprover` and the new `AuthDomainError`s;
-enforcement in `setFindingStatusAction`; and a `canDecide` flag that renders a
-viewer a disabled control with the reason.
+The whole authentication spec has shipped across two plans (wall, then roles and
+attribution). Gate re-verified at `380e14f` on 2026-08-12: lint 0, typecheck 0,
+**486 tests / 38 files**, build green, with
+`TEST_DATABASE_URL=postgres://postgres:postgres@localhost:5433/dashboard_test`
+and the `dashboard-test-pg` container up.
 
 ## The single next action
 
-None outstanding. Pick up whatever the user asks next. If that turns out to be
-more auth work, read the spec's "Out of scope" list first — several plausible
-next steps were ruled out deliberately (see below).
+Present **section 4 of the design — errors, security and testing** — get
+approval, then write the spec to
+`docs/superpowers/specs/2026-08-12-finding-decision-history-design.md`, matching
+the format of the two existing specs. Then self-review it, ask the user to review
+it, and only then invoke `superpowers:writing-plans`.
 
-## Verified, not assumed
+Sections 1–3 are already approved. Do not re-present them.
 
-Re-run on 2026-08-08 at `380e14f`, with
-`TEST_DATABASE_URL=postgres://postgres:postgres@localhost:5433/dashboard_test`
-exported and the `dashboard-test-pg` container up:
+## The design, as agreed
 
-- `npm run lint` — exit 0
-- `npm run typecheck` — exit 0
-- `npm test` — **486 passed, 38 files**. Without the URL: 401 + 5 skipped.
-- `npm run build` — succeeded
+Four questions were asked and answered. **Do not reopen these.**
 
-The same contract suite passes against both the in-memory and the PostgreSQL
-stores. Plan 1 was live-verified in a browser across eight checks (redirects,
-401s on the read APIs, HttpOnly holding, `?next=//evil.example` neutralised, the
-login throttle). Plan 2's six live checks are ticked in its plan file: an
-approver signs a decision and the drawer shows the email, the API returns the
-same `statusChangedBy`, a viewer sees the locked control, an expired session
-shows the sign-in prompt, and a re-scan preserves both email and justification.
+1. **Human decisions only.** Scanner-driven transitions (auto-resolve,
+   reopen-by-scan) record nothing. No person made those.
+2. **Alongside — the columns stay.** `statusReason` / `statusChangedAt` /
+   `statusChangedBy` remain the current-decision snapshot on the finding row.
+   History is additive. Invariant 4 and `reconcileFinding` are untouched.
+3. **Drawer timeline only.** No audit page, no history embedded in list payloads.
+4. **No backfill.** Findings decided before this ships get an explicit
+   "Earlier decisions were not recorded." line, not a synthesized row.
 
-## Decisions already made — do not relitigate
+Approach **B** was chosen over two alternatives: a `recordDecision()` method on
+`SecurityFindingRepository` that writes both the finding and the history row
+atomically inside one driver call. Rejected: a separate history repository
+orchestrated by the service (two independently-retried operations, so a crash
+between them leaves a decision with no history row — the exact gap this
+feature exists to close), and adding `withTransaction` to the Postgres container
+(machinery for one call site, and it puts repository calls inside an open
+transaction, the shape retry must never wrap).
 
-- **Local accounts, `scrypt` from `node:crypto`.** No new dependency.
-- **Server-side sessions, not signed cookies.** Logout is real revocation.
-- **Both storage drivers, one contract suite.**
-- **Everything behind the login except scan ingestion** (`POST
-  /api/security/scans`), which keeps its bearer token for CI.
-- **Two roles, `VIEWER` / `APPROVER`.** No third role, no permission table.
-- **`statusChangedBy` is a denormalized text email, never a foreign key.** A risk
-  acceptance is an audit record that must outlive the person leaving. `RESTRICT`
-  would make a departed employee undeletable; `SET NULL` would erase attribution.
-- **No backfill** of `status_changed_by` for pre-plan decisions — those genuinely
-  had no author. **No attribution on scanner-driven transitions** either; no
-  person made those.
-- **The UI is not the boundary.** `canDecide` only decides what renders;
-  `setFindingStatusAction` re-checks the role regardless. `canDecide` defaults to
-  `false` — fail closed.
-- **Enforcement is structural**: `protectedRoute()` on routes, `requireUser()` in
-  the layout *and* in each page.
-- **Provisioning is a CLI.** No self-signup, no admin UI, no SSO/OIDC, no
-  password reset.
-- Execution was **inline via `superpowers:executing-plans`**, not
-  subagent-driven: this harness is configured not to spawn agents unasked. Both
-  plans name either as acceptable. Revisit only if the user asks.
+### Section 1 — data model (approved)
 
-## Plan bugs found during execution
+New domain type `FindingDecision` in `src/domain/security/decision.ts`:
+`{ id, findingId, fromStatus, toStatus, reason?, decidedBy, decidedAt }`.
 
-Already corrected in code — listed so nobody reintroduces them from the plan
-text, which still shows the original snippets.
+Migration `005_finding_decisions.sql`:
 
-1. **`promisify(scrypt)`** — these `@types/node` declare no `__promisify__` for
-   `scrypt`, so promisify binds the 3-argument overload and the cost parameters
-   become untypable. `src/lib/auth/password.ts` restates the signature via a cast
-   to `(password, salt, keylen, options) => Promise<Buffer>`.
-2. **`Object.defineProperty(process.env, "NODE_ENV", …)`** throws
-   `'process.env' only accepts a configurable, writable, and enumerable data
-   descriptor`. Use `vi.stubEnv` / `vi.unstubAllEnvs`.
-3. **`protectedRoute<Context = undefined>`** fails Next 16's generated route
-   validator, which types *every* handler — static routes included — as receiving
-   a `{ params }` context. The default is `unknown`.
-4. **The plan's `proxy()` redirected `/login` and `/api/*` too**, contradicting
-   its own tests. `src/proxy.ts` checks the pathname prefix itself rather than
-   trusting the matcher.
+```sql
+CREATE TABLE IF NOT EXISTS finding_decisions (
+  id          TEXT PRIMARY KEY,
+  finding_id  TEXT NOT NULL REFERENCES security_findings (id) ON DELETE CASCADE,
+  from_status TEXT NOT NULL,
+  to_status   TEXT NOT NULL,
+  reason      TEXT,
+  decided_by  TEXT NOT NULL,
+  decided_at  TIMESTAMPTZ NOT NULL
+);
+CREATE INDEX IF NOT EXISTS finding_decisions_finding_idx
+  ON finding_decisions (finding_id, decided_at DESC);
+```
+
+- **This table gets a foreign key**, unlike `status_changed_by`. That column
+  refused one because users get deleted and attribution must survive them.
+  Findings are never deleted — the repository interface has no delete method —
+  so the FK is free. `CASCADE` is stated for correctness, not exercised.
+- `finding_id` targets `security_findings(id)`, not `fingerprint`: `id` is
+  `UNIQUE`, and the merge path pins `id: existing.id`, so it is stable across
+  re-ingestion.
+- `decided_by` is `NOT NULL` — `requireApprover()` guarantees a session, so a
+  row without an author is a bug and the schema says so.
+- `reason` is nullable only because reopening to `OPEN` allows it.
+- `from_status` is `NOT NULL` and always differs from `to_status`, because
+  `setFindingStatus` returns early on a no-op transition.
+
+### Section 2 — write path (approved)
+
+`SecurityFindingRepository` gains exactly two methods:
+
+```ts
+recordDecision(id, patch, decision): Promise<SecurityFinding | null>
+listDecisionHistory(id): Promise<FindingDecision[]>
+```
+
+No update, no delete for decisions in either driver — append-only is a property
+of the interface, not a convention.
+
+- **Postgres** follows the `saveMany` pattern: `withRetry(() =>
+  this.recordDecisionOnce(...))`, one `BEGIN`, finding upsert plus decision
+  insert, `COMMIT`, rollback and release on error. Retry still wraps the whole
+  unit from `BEGIN`. The memory driver mutates both structures in one
+  synchronous block.
+- **Retry idempotency — the subtle part.** `saveMany` replays safely because its
+  insert is an upsert; an append is not. `08007
+  transaction_resolution_unknown` is retryable, so a lost `COMMIT`
+  acknowledgement could replay a transaction that actually committed. Therefore
+  **the service generates the decision id** (`dec_${randomUUID()}`, matching
+  `run_` and `usr_`) and the insert is `ON CONFLICT (id) DO NOTHING`. A
+  driver-generated id would produce a duplicate row on replay.
+- **`setFindingStatus` keeps its current order** — no-op check, `canTransition`,
+  reason validation — then builds the decision from the transition it already
+  computed and calls `recordDecision` instead of `update`.
+- **`changedBy` becomes required**, not optional. The only caller that omits it
+  today is `src/lib/security/mock/seed-mock-data.ts`, which will pass
+  `dev@localhost`. `decided_by` is a text snapshot, so this holds on Postgres
+  where that account does not exist.
+- **Scans stay out.** `reconcileFinding` and `resolveFinding` are untouched; no
+  ingestion path calls `recordDecision`. The NEW path clearing
+  `statusChangedBy` cannot orphan history: NEW means an unseen fingerprint,
+  hence a new finding id, hence no rows to orphan.
+
+### Section 3 — read path and UI (approved)
+
+- `listDecisionHistory(id)` returns newest-first, both drivers, asserted in the
+  contract suite.
+- Route `GET /api/security/findings/[id]/history` —
+  `protectedRoute<{ params: Promise<{ id: string }> }>`, returns `{ decisions }`,
+  404 when the finding is absent, mirroring the sibling `[id]` route so
+  existence leaks identically. **Any signed-in user may read it**, viewers
+  included; `requireApprover()` stays on the write path only.
+- `FindingDetails` gains an optional
+  `loadHistory?: (id) => Promise<FindingDecision[]>` prop, injected the way
+  `onApplyStatus` already is. Absent ⇒ no timeline, fail closed like
+  `canDecide`. This keeps `fetch` out of the component and lets tests await the
+  expected call instead of racing it.
+- Three states: loading, empty, list. The empty state reads "Earlier decisions
+  were not recorded." — the visible consequence of the no-backfill decision.
+- Each row: `dev@localhost moved OPEN → ACCEPTED_RISK`, timestamp through
+  `formatDateTime`, justification below as text. JSX escaping only; the
+  no-`dangerouslySetInnerHTML` rule is absolute even though the reason is human
+  input rather than scanner output.
+- After a successful decision the drawer refetches rather than optimistically
+  prepending.
+
+### Section 4 — not yet presented
+
+Errors, security and testing. Nothing agreed. Expect it to cover: what
+`recordDecision` does when the finding vanishes mid-call, the contract-suite
+assertions both drivers must pass, the route test, the component tests for the
+three timeline states, and confirmation that no error message quotes a
+credential.
+
+## Task list state
+
+Tasks 1–3 completed, 4 in progress (present the design), 5–7 pending (write and
+commit the spec, self-review, user review). Terminal state of brainstorming is
+invoking `superpowers:writing-plans` — no other skill.
+
+## Decisions from the auth work — do not relitigate
+
+- Local accounts, `scrypt` from `node:crypto`. Server-side revocable sessions.
+- Both storage drivers, one contract suite.
+- Everything behind the login except `POST /api/security/scans`, which keeps its
+  bearer token for CI.
+- Two roles, `VIEWER` / `APPROVER`. No third role, no permission table.
+- `statusChangedBy` is a denormalized text email, never a foreign key.
+- No backfill of `status_changed_by`; no attribution on scanner transitions.
+- The UI is not the boundary — `setFindingStatusAction` re-checks the role
+  regardless of what the drawer rendered. `canDecide` defaults to `false`.
+- Enforcement is structural: `protectedRoute()` on routes, `requireUser()` in the
+  layout *and* in each page.
+- Provisioning is a CLI. No self-signup, admin UI, SSO/OIDC or password reset.
+- Execution is **inline**, not subagent-driven: this harness does not spawn
+  agents unasked.
 
 ## Traps
 
-- **`src/proxy.ts` is not a security boundary.** Cookie *presence* only, never
-  validity. Layouts do not re-run on every client-side navigation, so a page that
-  only inherits the layout check is still reachable.
+- **`src/proxy.ts` is not a security boundary.** Cookie presence only, never
+  validity. Layouts do not re-run on client-side navigation.
 - **`server-only` is aliased to its own `empty.js` in `vitest.config.mts`.**
-  Vitest sets neither React condition, so the real module throws on import.
-  Without the alias no test can import the auth container or the guards.
-- **The secret-scan hook blocks credential-shaped literals, including fake ones.**
-  The placeholder hash in the auth contract suite is assembled at runtime from two
-  fragments — the same trick `mock-scan-payloads.ts` uses. Writing it inline
-  blocks the edit, and the hook blocks *this file* too if it quotes such a value.
-- **scrypt `N` must stay 16384.** Memory is roughly `N * r * 128`; N=32768 with
-  r=8 hits Node's 32 MB default `maxmem` and throws at runtime.
-- **The scrypt parameters are duplicated in `scripts/user.mjs` on purpose.**
-  `tests/auth/user-cli.test.ts` asserts a CLI-written hash verifies through the
-  application. Change one, change both.
-- **The CLI cannot work against the memory driver** — separate process, store the
-  server cannot see. Hence the dev seed, hard-refused when `NODE_ENV=production`,
-  on Postgres, in live mode, or when any account exists. To test the viewer role
-  on the memory driver, change the seeded account's role in the seed.
+  Without it no test can import the auth container or the guards.
+- **The secret-scan hook blocks credential-shaped literals, including fake ones**
+  — and blocks *this file* too if it quotes one. The auth contract suite's
+  placeholder hash is assembled at runtime from two fragments.
+- **scrypt `N` must stay 16384** (memory is roughly `N * r * 128`; 32768 with
+  r=8 exceeds Node's 32 MB `maxmem`), and the parameters are duplicated in
+  `scripts/user.mjs` on purpose. Change one, change both.
+- **The CLI cannot work against the memory driver** — separate process. To test
+  the viewer role there, change the seeded account's role in the seed.
 - Port 5432 on this machine is an SSH tunnel. Test container is on **5433**.
 - The container is cached on `globalThis`; seeding and wiring changes need a dev
-  server restart, not just a save. `resetAuthContainer()` is the test seam.
+  server restart. `resetAuthContainer()` is the test seam.
 - `.claude/launch.json` has `"autoPort": true` — the dev server does not come up
   on 3000. `preview_list` then `preview_stop` if one is still running.
-- The dev-server browser pane reported a **0x0 viewport**, so coordinate clicks
-  missed. Driving forms through `javascript_tool` worked fine.
+- The dev-server browser pane reported a **0x0 viewport**; drive forms through
+  `javascript_tool` instead of coordinate clicks.
+- Mock data is tuned to 23 open / 3 critical / 7 high / 13 medium / 0 low.
+  Adding a `dev@localhost` signature to the seeded acceptance does not change
+  the status distribution, so those numbers must stay put.
