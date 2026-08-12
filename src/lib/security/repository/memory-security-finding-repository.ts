@@ -1,3 +1,4 @@
+import type { FindingDecision } from "@/domain/security/decision";
 import { SEVERITY_RANK } from "@/domain/security/enums";
 import {
   emptySeverityCounts,
@@ -34,6 +35,9 @@ export class InMemorySecurityFindingRepository
 {
   /** fingerprint -> finding. Fingerprint is the natural key; id is derived. */
   private readonly findings = new Map<string, SecurityFinding>();
+
+  /** finding id -> decisions in append order. Sorted on read, like Postgres. */
+  private readonly decisions = new Map<string, FindingDecision[]>();
 
   constructor(seed: readonly SecurityFinding[] = []) {
     seed.forEach((finding) => this.findings.set(finding.fingerprint, finding));
@@ -132,6 +136,43 @@ export class InMemorySecurityFindingRepository
     const updated: SecurityFinding = { ...existing, ...safePatch };
     this.findings.set(existing.fingerprint, updated);
     return updated;
+  }
+
+  async recordDecision(
+    id: string,
+    patch: Partial<SecurityFinding>,
+    decision: FindingDecision,
+  ): Promise<SecurityFinding | null> {
+    const existing = await this.findById(id);
+    if (!existing) return null;
+
+    // Identity is not patchable: allowing it would silently orphan history.
+    const { id: _id, fingerprint: _fingerprint, ...safePatch } = patch;
+    void _id;
+    void _fingerprint;
+
+    // One synchronous block: the finding update and the append cannot be
+    // observed half-done, which is the transaction the Postgres driver runs.
+    const updated: SecurityFinding = { ...existing, ...safePatch };
+    this.findings.set(existing.fingerprint, updated);
+
+    const history = this.decisions.get(id) ?? [];
+    // Same idempotency Postgres gets from ON CONFLICT (id) DO NOTHING: a
+    // replayed decision id is not appended twice.
+    if (!history.some((entry) => entry.id === decision.id)) {
+      history.push({ ...decision });
+    }
+    this.decisions.set(id, history);
+
+    return updated;
+  }
+
+  async listDecisionHistory(id: string): Promise<FindingDecision[]> {
+    const history = this.decisions.get(id) ?? [];
+    return [...history].sort(
+      (a, b) =>
+        b.decidedAt.localeCompare(a.decidedAt) || b.id.localeCompare(a.id),
+    );
   }
 
   // --- aggregates ----------------------------------------------------------

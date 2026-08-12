@@ -1,3 +1,4 @@
+import type { FindingDecision } from "@/domain/security/decision";
 import type {
   FindingFilters,
   FindingQuery,
@@ -43,6 +44,22 @@ export interface SecurityFindingRepository {
     id: string,
     patch: Partial<SecurityFinding>,
   ): Promise<SecurityFinding | null>;
+
+  /**
+   * Apply a status patch and append the decision that caused it, atomically:
+   * both land or neither does. Returns null — writing nothing — when the
+   * finding does not exist. Replay-safe: a decision id already stored is not
+   * appended twice, because retry may replay a transaction whose COMMIT
+   * acknowledgement was lost.
+   */
+  recordDecision(
+    id: string,
+    patch: Partial<SecurityFinding>,
+    decision: FindingDecision,
+  ): Promise<SecurityFinding | null>;
+
+  /** Every recorded decision for a finding, newest first. */
+  listDecisionHistory(id: string): Promise<FindingDecision[]>;
 
   getStatistics(
     filters?: FindingFilters,

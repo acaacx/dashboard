@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it } from "vitest";
 
+import type { FindingDecision } from "@/domain/security/decision";
 import type { SecurityFinding } from "@/domain/security/finding";
 import type { SecurityFindingRepository } from "@/lib/security/repository/security-finding-repository";
 
@@ -603,6 +604,148 @@ export function runSecurityFindingRepositoryContract(
         environments: [],
         scanners: [],
         categories: [],
+      });
+    });
+
+    // --- decision history ----------------------------------------------------
+
+    describe("decision history", () => {
+      function decision(
+        overrides: Partial<FindingDecision> = {},
+      ): FindingDecision {
+        return {
+          id: "dec_1",
+          findingId: "fnd_a",
+          fromStatus: "OPEN",
+          toStatus: "ACCEPTED_RISK",
+          reason: "Mitigated by a compensating control.",
+          decidedBy: "approver@example.com",
+          decidedAt: "2026-08-11T09:00:00.000Z",
+          ...overrides,
+        };
+      }
+
+      it("applies the patch and appends the decision in one call", async () => {
+        const updated = await repository.recordDecision(
+          "fnd_a",
+          {
+            status: "ACCEPTED_RISK",
+            statusReason: "Mitigated by a compensating control.",
+            statusChangedAt: "2026-08-11T09:00:00.000Z",
+            statusChangedBy: "approver@example.com",
+          },
+          decision(),
+        );
+
+        expect(updated?.status).toBe("ACCEPTED_RISK");
+        expect((await repository.findById("fnd_a"))?.status).toBe(
+          "ACCEPTED_RISK",
+        );
+
+        const history = await repository.listDecisionHistory("fnd_a");
+        expect(history).toHaveLength(1);
+        expect(history[0]).toMatchObject({
+          id: "dec_1",
+          findingId: "fnd_a",
+          fromStatus: "OPEN",
+          toStatus: "ACCEPTED_RISK",
+          reason: "Mitigated by a compensating control.",
+          decidedBy: "approver@example.com",
+          decidedAt: "2026-08-11T09:00:00.000Z",
+        });
+      });
+
+      it("returns null for an unknown finding and records nothing", async () => {
+        const result = await repository.recordDecision(
+          "fnd_missing",
+          { status: "ACCEPTED_RISK" },
+          decision({ findingId: "fnd_missing" }),
+        );
+
+        // The atomicity assertion: no patched finding, therefore no row.
+        expect(result).toBeNull();
+        expect(await repository.listDecisionHistory("fnd_missing")).toEqual([]);
+      });
+
+      it("lists newest first with a deterministic tiebreak", async () => {
+        await repository.recordDecision(
+          "fnd_a",
+          { status: "ACCEPTED_RISK" },
+          decision({ id: "dec_a", decidedAt: "2026-08-10T09:00:00.000Z" }),
+        );
+        await repository.recordDecision(
+          "fnd_a",
+          { status: "OPEN" },
+          decision({
+            id: "dec_b",
+            fromStatus: "ACCEPTED_RISK",
+            toStatus: "OPEN",
+            reason: undefined,
+            decidedAt: "2026-08-11T09:00:00.000Z",
+          }),
+        );
+        await repository.recordDecision(
+          "fnd_a",
+          { status: "SUPPRESSED" },
+          decision({
+            id: "dec_c",
+            toStatus: "SUPPRESSED",
+            decidedAt: "2026-08-11T09:00:00.000Z",
+          }),
+        );
+
+        const history = await repository.listDecisionHistory("fnd_a");
+        // Equal decidedAt on dec_b and dec_c: id DESC breaks the tie.
+        expect(history.map((entry) => entry.id)).toEqual([
+          "dec_c",
+          "dec_b",
+          "dec_a",
+        ]);
+      });
+
+      it("stores a replayed decision id once", async () => {
+        await repository.recordDecision(
+          "fnd_a",
+          { status: "ACCEPTED_RISK" },
+          decision(),
+        );
+        await repository.recordDecision(
+          "fnd_a",
+          { status: "ACCEPTED_RISK" },
+          decision(),
+        );
+
+        expect(await repository.listDecisionHistory("fnd_a")).toHaveLength(1);
+      });
+
+      it("returns an empty history for an undecided finding", async () => {
+        expect(await repository.listDecisionHistory("fnd_b")).toEqual([]);
+      });
+
+      it("round-trips an absent reason as undefined, not empty string", async () => {
+        await repository.recordDecision(
+          "fnd_a",
+          { status: "SUPPRESSED" },
+          decision({ reason: undefined, toStatus: "SUPPRESSED" }),
+        );
+
+        const [entry] = await repository.listDecisionHistory("fnd_a");
+        expect(entry.reason).toBeUndefined();
+      });
+
+      it("refuses to change identity through recordDecision", async () => {
+        const updated = await repository.recordDecision(
+          "fnd_a",
+          {
+            id: "fnd_hacked",
+            fingerprint: "fp_hacked",
+            status: "ACCEPTED_RISK",
+          },
+          decision(),
+        );
+
+        expect(updated?.id).toBe("fnd_a");
+        expect(updated?.fingerprint).toBe("a");
       });
     });
   });
