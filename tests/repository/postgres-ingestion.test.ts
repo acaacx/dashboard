@@ -138,6 +138,7 @@ if (!TEST_DATABASE_URL) {
         target.id,
         "ACCEPTED_RISK",
         "Accepted for the duration of the migration.",
+        { changedBy: "approver@example.com" },
       );
 
       await ingestion.ingest({

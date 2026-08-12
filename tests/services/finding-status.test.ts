@@ -41,7 +41,7 @@ describe("SecurityService.setFindingStatus", () => {
       "fnd_1",
       "ACCEPTED_RISK",
       "  Mitigated by the WAF rule shipped in PR 412.  ",
-      { now: NOW },
+      { changedBy: "approver@example.com", now: NOW },
     );
 
     expect(updated?.status).toBe("ACCEPTED_RISK");
@@ -58,7 +58,10 @@ describe("SecurityService.setFindingStatus", () => {
       "SUPPRESSED",
     ] as const) {
       await expect(
-        service.setFindingStatus("fnd_1", status, undefined, { now: NOW }),
+        service.setFindingStatus("fnd_1", status, undefined, {
+          changedBy: "approver@example.com",
+          now: NOW,
+        }),
       ).rejects.toBeInstanceOf(InvalidStatusReasonError);
     }
   });
@@ -66,6 +69,7 @@ describe("SecurityService.setFindingStatus", () => {
   it("treats a whitespace-only reason as missing", async () => {
     await expect(
       service.setFindingStatus("fnd_1", "ACCEPTED_RISK", "   \n ", {
+        changedBy: "approver@example.com",
         now: NOW,
       }),
     ).rejects.toBeInstanceOf(InvalidStatusReasonError);
@@ -74,6 +78,7 @@ describe("SecurityService.setFindingStatus", () => {
   it("rejects a reason longer than the limit", async () => {
     await expect(
       service.setFindingStatus("fnd_1", "ACCEPTED_RISK", "x".repeat(501), {
+        changedBy: "approver@example.com",
         now: NOW,
       }),
     ).rejects.toBeInstanceOf(InvalidStatusReasonError);
@@ -81,6 +86,7 @@ describe("SecurityService.setFindingStatus", () => {
 
   it("clears a stale justification when a finding is reopened without one", async () => {
     await service.setFindingStatus("fnd_1", "FALSE_POSITIVE", "Test fixture.", {
+      changedBy: "approver@example.com",
       now: NOW,
     });
 
@@ -88,7 +94,7 @@ describe("SecurityService.setFindingStatus", () => {
       "fnd_1",
       "OPEN",
       undefined,
-      { now: new Date("2026-08-13T10:00:00.000Z") },
+      { changedBy: "approver@example.com", now: new Date("2026-08-13T10:00:00.000Z") },
     );
 
     expect(reopened?.status).toBe("OPEN");
@@ -98,16 +104,21 @@ describe("SecurityService.setFindingStatus", () => {
 
   it("rejects a transition the lifecycle does not allow", async () => {
     await service.setFindingStatus("fnd_1", "FALSE_POSITIVE", "Test fixture.", {
+      changedBy: "approver@example.com",
       now: NOW,
     });
 
     await expect(
-      service.setFindingStatus("fnd_1", "SUPPRESSED", "Because.", { now: NOW }),
+      service.setFindingStatus("fnd_1", "SUPPRESSED", "Because.", {
+        changedBy: "approver@example.com",
+        now: NOW,
+      }),
     ).rejects.toBeInstanceOf(InvalidStatusTransitionError);
   });
 
   it("leaves a same-status call untouched and ignores its reason", async () => {
     await service.setFindingStatus("fnd_1", "ACCEPTED_RISK", "Original.", {
+      changedBy: "approver@example.com",
       now: NOW,
     });
 
@@ -115,7 +126,7 @@ describe("SecurityService.setFindingStatus", () => {
       "fnd_1",
       "ACCEPTED_RISK",
       "Rewritten without a transition.",
-      { now: new Date("2026-08-20T10:00:00.000Z") },
+      { changedBy: "approver@example.com", now: new Date("2026-08-20T10:00:00.000Z") },
     );
 
     expect(again?.statusReason).toBe("Original.");
@@ -125,6 +136,7 @@ describe("SecurityService.setFindingStatus", () => {
   it("returns null for an unknown id", async () => {
     expect(
       await service.setFindingStatus("fnd_missing", "ACCEPTED_RISK", "x", {
+        changedBy: "approver@example.com",
         now: NOW,
       }),
     ).toBeNull();
@@ -157,14 +169,100 @@ describe("SecurityService.setFindingStatus", () => {
     expect(reopened?.statusReason).toBeUndefined();
   });
 
-  it("records no author when none is supplied", async () => {
-    const updated = await service.setFindingStatus(
+  it("generates a distinct dec_-prefixed id per decision", async () => {
+    await service.setFindingStatus("fnd_1", "ACCEPTED_RISK", "Mitigated.", {
+      changedBy: "approver@example.com",
+      now: NOW,
+    });
+    await service.setFindingStatus("fnd_1", "OPEN", undefined, {
+      changedBy: "approver@example.com",
+      now: new Date("2026-08-13T10:00:00.000Z"),
+    });
+
+    const history = await findings.listDecisionHistory("fnd_1");
+    expect(history).toHaveLength(2);
+    expect(new Set(history.map((entry) => entry.id)).size).toBe(2);
+    for (const entry of history) {
+      expect(entry.id).toMatch(/^dec_/);
+    }
+  });
+});
+
+describe("SecurityService.setFindingStatus decision history", () => {
+  it("records the transition it applied", async () => {
+    await service.setFindingStatus(
       "fnd_1",
-      "SUPPRESSED",
-      "Known noise from the generated client.",
-      { now: NOW },
+      "ACCEPTED_RISK",
+      "  Mitigated by the WAF rule shipped in PR 412.  ",
+      { changedBy: "approver@example.com", now: NOW },
     );
 
-    expect(updated?.statusChangedBy).toBeUndefined();
+    const [entry] = await findings.listDecisionHistory("fnd_1");
+    expect(entry).toMatchObject({
+      findingId: "fnd_1",
+      fromStatus: "OPEN",
+      toStatus: "ACCEPTED_RISK",
+      // The stored reason is the validated, trimmed value — one path, not two.
+      reason: "Mitigated by the WAF rule shipped in PR 412.",
+      decidedBy: "approver@example.com",
+      decidedAt: "2026-08-12T10:00:00.000Z",
+    });
+  });
+
+  it("writes no history for a no-op transition", async () => {
+    await service.setFindingStatus("fnd_1", "ACCEPTED_RISK", "Original.", {
+      changedBy: "approver@example.com",
+      now: NOW,
+    });
+    await service.setFindingStatus("fnd_1", "ACCEPTED_RISK", "Rewrite.", {
+      changedBy: "second@example.com",
+      now: NOW,
+    });
+
+    expect(await findings.listDecisionHistory("fnd_1")).toHaveLength(1);
+  });
+
+  it("writes no history for a rejected transition or reason", async () => {
+    // Missing justification: rejected before the decision object exists.
+    await expect(
+      service.setFindingStatus("fnd_1", "ACCEPTED_RISK", undefined, {
+        changedBy: "approver@example.com",
+        now: NOW,
+      }),
+    ).rejects.toBeInstanceOf(InvalidStatusReasonError);
+
+    // Disallowed transition: same guarantee.
+    await service.setFindingStatus("fnd_1", "FALSE_POSITIVE", "Fixture.", {
+      changedBy: "approver@example.com",
+      now: NOW,
+    });
+    await expect(
+      service.setFindingStatus("fnd_1", "SUPPRESSED", "Because.", {
+        changedBy: "approver@example.com",
+        now: NOW,
+      }),
+    ).rejects.toBeInstanceOf(InvalidStatusTransitionError);
+
+    // Only the one successful decision is on the tape.
+    expect(await findings.listDecisionHistory("fnd_1")).toHaveLength(1);
+  });
+
+  it("returns history newest first and null for an unknown finding", async () => {
+    await service.setFindingStatus("fnd_1", "ACCEPTED_RISK", "Mitigated.", {
+      changedBy: "approver@example.com",
+      now: NOW,
+    });
+    await service.setFindingStatus("fnd_1", "OPEN", undefined, {
+      changedBy: "second@example.com",
+      now: new Date("2026-08-13T10:00:00.000Z"),
+    });
+
+    const history = await service.getDecisionHistory("fnd_1");
+    expect(history?.map((entry) => entry.toStatus)).toEqual([
+      "OPEN",
+      "ACCEPTED_RISK",
+    ]);
+
+    expect(await service.getDecisionHistory("fnd_missing")).toBeNull();
   });
 });

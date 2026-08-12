@@ -174,6 +174,9 @@ async function acceptOneRisk(security: SecurityService): Promise<void> {
       target.id,
       "ACCEPTED_RISK",
       "Key vault purge protection is enforced by Azure Policy at the subscription level; the module flag is redundant here.",
+      // The dev approver the memory container seeds. decided_by is a text
+      // snapshot, so this also holds on Postgres where no such account exists.
+      { changedBy: "dev@localhost" },
     );
   }
 }

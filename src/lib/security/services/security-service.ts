@@ -1,3 +1,6 @@
+import { randomUUID } from "node:crypto";
+
+import type { FindingDecision } from "@/domain/security/decision";
 import {
   scannerLabel,
   type FindingStatus,
@@ -305,13 +308,15 @@ export class SecurityService {
    * recorded reason is not auditable, which is the whole point of the status.
    *
    * `options.changedBy` is the deciding user's email, snapshotted onto the
-   * finding. The caller supplies it from the session; the service never guesses.
+   * finding and onto the appended decision. The caller supplies it from the
+   * session; the service never guesses, and the type no longer lets a caller
+   * omit it.
    */
   async setFindingStatus(
     id: string,
     status: FindingStatus,
     reason: string | undefined,
-    options: { changedBy?: string; now?: Date } = {},
+    options: { changedBy: string; now?: Date },
   ): Promise<SecurityFinding | null> {
     const now = options.now ?? new Date();
     const finding = await this.findings.findById(id);
@@ -342,16 +347,44 @@ export class SecurityService {
       statusReason = parsed.data;
     }
 
-    return this.findings.update(id, {
-      status,
-      resolvedAt: status === "RESOLVED" ? now.toISOString() : undefined,
-      // Reopening without a reason clears the old one: a justification written
-      // for a status the finding no longer holds reads as a current decision.
-      statusReason,
-      statusChangedAt: now.toISOString(),
-      // Attribution belongs to the change, not to the justification: this is
-      // who made the change `statusChangedAt` timestamps.
-      statusChangedBy: options.changedBy,
-    });
+    const decision: FindingDecision = {
+      // The service, not the driver, generates the id: recordDecision retries
+      // as a whole unit, and a replay after a lost COMMIT acknowledgement must
+      // dedupe on a stable id rather than append a second row.
+      id: `dec_${randomUUID()}`,
+      findingId: id,
+      fromStatus: finding.status,
+      toStatus: status,
+      reason: statusReason,
+      decidedBy: options.changedBy,
+      decidedAt: now.toISOString(),
+    };
+
+    return this.findings.recordDecision(
+      id,
+      {
+        status,
+        resolvedAt: status === "RESOLVED" ? now.toISOString() : undefined,
+        // Reopening without a reason clears the old one: a justification written
+        // for a status the finding no longer holds reads as a current decision.
+        statusReason,
+        statusChangedAt: now.toISOString(),
+        // Attribution belongs to the change, not to the justification: this is
+        // who made the change `statusChangedAt` timestamps.
+        statusChangedBy: options.changedBy,
+      },
+      decision,
+    );
+  }
+
+  /**
+   * Every human decision recorded for a finding, newest first. Null when the
+   * finding does not exist, so the history route can 404 exactly as the
+   * sibling finding route does.
+   */
+  async getDecisionHistory(id: string): Promise<FindingDecision[] | null> {
+    const finding = await this.findings.findById(id);
+    if (!finding) return null;
+    return this.findings.listDecisionHistory(id);
   }
 }

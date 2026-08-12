@@ -132,6 +132,34 @@ describe("ScanIngestionService.ingest", () => {
     expect((await findings.findAll({ status: ["OPEN"] })).total).toBe(2);
   });
 
+  it("records no decision history for scanner-driven transitions", async () => {
+    const { ingestion, findings } = build();
+
+    // First scan opens findings; the trimmed second resolves one; the third
+    // reopens it — the full machine lifecycle.
+    await ingestion.ingest({ ...baseRequest, scannedAt: "2026-08-01T10:00:00.000Z" });
+
+    const trimmed = structuredClone(semgrepJson) as { results: unknown[] };
+    trimmed.results = [trimmed.results[0]];
+    await ingestion.ingest({
+      ...baseRequest,
+      results: trimmed,
+      scannedAt: "2026-08-06T10:00:00.000Z",
+    });
+    await ingestion.ingest({
+      ...baseRequest,
+      scannedAt: "2026-08-07T10:00:00.000Z",
+    });
+
+    // Auto-resolve and reopen-by-scan are evidence, not decisions: no person
+    // made them, so the attributed trail stays empty.
+    const page = await findings.findAll();
+    expect(page.total).toBeGreaterThan(0);
+    for (const found of page.items) {
+      expect(await findings.listDecisionHistory(found.id)).toEqual([]);
+    }
+  });
+
   it("does not resolve another scanner's findings", async () => {
     const { ingestion, findings } = build();
 
