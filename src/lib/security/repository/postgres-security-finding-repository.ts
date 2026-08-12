@@ -1,5 +1,6 @@
 import type { Pool } from "pg";
 
+import type { FindingDecision } from "@/domain/security/decision";
 import {
   emptySeverityCounts,
   type FindingFilters,
@@ -91,6 +92,16 @@ interface FindingRow {
   metadata: Record<string, unknown> | null;
 }
 
+interface DecisionRow {
+  id: string;
+  finding_id: string;
+  from_status: string;
+  to_status: string;
+  reason: string | null;
+  decided_by: string;
+  decided_at: Date;
+}
+
 function iso(value: Date | null): string | undefined {
   return value ? value.toISOString() : undefined;
 }
@@ -137,6 +148,18 @@ function toFinding(row: FindingRow): SecurityFinding {
     remediation: undef(row.remediation),
     sourceUrl: undef(row.source_url),
     metadata: row.metadata ?? undefined,
+  };
+}
+
+function toDecision(row: DecisionRow): FindingDecision {
+  return {
+    id: row.id,
+    findingId: row.finding_id,
+    fromStatus: row.from_status as FindingDecision["fromStatus"],
+    toStatus: row.to_status as FindingDecision["toStatus"],
+    reason: undef(row.reason),
+    decidedBy: row.decided_by,
+    decidedAt: row.decided_at.toISOString(),
   };
 }
 
@@ -432,6 +455,112 @@ export class PostgresSecurityFindingRepository
     return updated;
   }
 
+  async recordDecision(
+    id: string,
+    patch: Partial<SecurityFinding>,
+    decision: FindingDecision,
+  ): Promise<SecurityFinding | null> {
+    // Retried as one unit, from BEGIN, like saveMany. The replay hazard is the
+    // decision INSERT — an append is not naturally idempotent — so it dedupes
+    // on the service-generated id.
+    return withRetry(() => this.recordDecisionOnce(id, patch, decision), {
+      operation: "findings.recordDecision",
+      onRetry: reportRetry,
+    });
+  }
+
+  private async recordDecisionOnce(
+    id: string,
+    patch: Partial<SecurityFinding>,
+    decision: FindingDecision,
+  ): Promise<SecurityFinding | null> {
+    const client = await this.pool.connect();
+    try {
+      await client.query("BEGIN");
+
+      const found = await client.query(
+        `SELECT ${COLUMNS} FROM security_findings f WHERE f.id = $1`,
+        [id],
+      );
+      const row = found.rows[0] as FindingRow | undefined;
+      if (!row) {
+        await client.query("ROLLBACK");
+        return null;
+      }
+
+      // Identity is not patchable — changing it would orphan history.
+      const { id: _id, fingerprint: _fingerprint, ...safePatch } = patch;
+      void _id;
+      void _fingerprint;
+      const updated: SecurityFinding = { ...toFinding(row), ...safePatch };
+
+      // Full-column overwrite, mirroring saveMany: the merged finding is
+      // authoritative. Params follow the COLUMNS order; $2 is the id.
+      const result = await client.query(
+        `UPDATE security_findings SET
+           fingerprint = $1, scanner = $3, category = $4, severity = $5,
+           title = $6, description = $7, repository_id = $8,
+           repository_name = $9, branch = $10, commit_sha = $11,
+           application_id = $12, environment = $13, file = $14,
+           start_line = $15, end_line = $16, package_name = $17,
+           package_version = $18, fixed_version = $19, cve = $20, cwe = $21,
+           rule_id = $22, resource = $23, azure_resource_id = $24,
+           subscription_id = $25, resource_group = $26, status = $27,
+           first_detected_at = $28, last_detected_at = $29, resolved_at = $30,
+           status_reason = $31, status_changed_at = $32,
+           status_changed_by = $33, remediation = $34, source_url = $35,
+           metadata = $36
+         WHERE id = $2`,
+        toParams(updated),
+      );
+      if (result.rowCount === 0) {
+        // Findings are never deleted, so this cannot happen today; stated so
+        // the atomicity guarantee does not depend on that staying true.
+        await client.query("ROLLBACK");
+        return null;
+      }
+
+      // ON CONFLICT DO NOTHING: a retry that replays a transaction whose
+      // COMMIT acknowledgement was lost must not append a second row.
+      await client.query(
+        `INSERT INTO finding_decisions
+           (id, finding_id, from_status, to_status, reason, decided_by, decided_at)
+         VALUES ($1, $2, $3, $4, $5, $6, $7)
+         ON CONFLICT (id) DO NOTHING`,
+        [
+          decision.id,
+          decision.findingId,
+          decision.fromStatus,
+          decision.toStatus,
+          decision.reason ?? null,
+          decision.decidedBy,
+          decision.decidedAt,
+        ],
+      );
+
+      await client.query("COMMIT");
+      return updated;
+    } catch (error) {
+      // A rollback on an already-dead connection throws again; the original
+      // error is what matters, so the attempt is best-effort.
+      await client.query("ROLLBACK").catch(() => undefined);
+      throw error;
+    } finally {
+      client.release();
+    }
+  }
+
+  async listDecisionHistory(id: string): Promise<FindingDecision[]> {
+    const rows = await this.query<DecisionRow>(
+      `SELECT id, finding_id, from_status, to_status, reason, decided_by, decided_at
+       FROM finding_decisions
+       WHERE finding_id = $1
+       ORDER BY decided_at DESC, id DESC`,
+      [id],
+    );
+    return rows.map(toDecision);
+  }
+
   // --- aggregates ----------------------------------------------------------
 
   async getStatistics(
@@ -719,6 +848,7 @@ export class PostgresSecurityFindingRepository
 
   /** Test helper: remove every row. Never called by application code. */
   async truncate(): Promise<void> {
-    await this.query("TRUNCATE security_findings");
+    // CASCADE: finding_decisions references this table.
+    await this.query("TRUNCATE security_findings CASCADE");
   }
 }

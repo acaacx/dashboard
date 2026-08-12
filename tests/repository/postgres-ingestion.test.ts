@@ -60,7 +60,7 @@ if (!TEST_DATABASE_URL) {
   });
 
   beforeEach(async () => {
-    await pool.query("TRUNCATE security_findings");
+    await pool.query("TRUNCATE security_findings CASCADE");
     await pool.query("TRUNCATE scan_runs");
   });
 

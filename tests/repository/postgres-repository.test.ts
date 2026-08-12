@@ -43,7 +43,8 @@ if (!TEST_DATABASE_URL) {
   runSecurityFindingRepositoryContract("postgres", {
     create: async () => {
       // Truncate rather than recreate the schema: same isolation, far faster.
-      await pool.query("TRUNCATE security_findings");
+      // CASCADE: finding_decisions references security_findings.
+      await pool.query("TRUNCATE security_findings CASCADE");
       return new PostgresSecurityFindingRepository(pool);
     },
   });
