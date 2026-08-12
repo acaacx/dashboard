@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
 import { GET as findingsGet } from "@/app/api/security/findings/route";
+import { GET as historyGet } from "@/app/api/security/findings/[id]/history/route";
 import { GET as scansGet, POST as scansPost } from "@/app/api/security/scans/route";
 import { GET as statisticsGet } from "@/app/api/security/statistics/route";
 import { clearMemoryAuth, useMemoryAuth, withSession } from "../helpers/session";
@@ -64,6 +65,62 @@ describe("protected API routes", () => {
     );
 
     expect(response.status).toBe(400);
+  });
+
+  describe("finding history", () => {
+    const historyUrl = (id: string) =>
+      `http://localhost/api/security/findings/${id}/history`;
+    const routeContext = (id: string) => ({
+      params: Promise.resolve({ id }),
+    });
+
+    it("refuses an anonymous request with 401", async () => {
+      const response = await historyGet(
+        new Request(historyUrl("fnd_any")),
+        routeContext("fnd_any"),
+      );
+
+      expect(response.status).toBe(401);
+    });
+
+    it("serves a viewer: reading history needs no approver role", async () => {
+      const { cookie } = await withSession(
+        "history-viewer@example.com",
+        "VIEWER",
+      );
+
+      const list = await findingsGet(
+        new Request("http://localhost/api/security/findings", {
+          headers: { cookie },
+        }),
+      );
+      const page = await list.json();
+      const id: string = page.items[0].id;
+
+      const response = await historyGet(
+        new Request(historyUrl(id), { headers: { cookie } }),
+        routeContext(id),
+      );
+
+      expect(response.status).toBe(200);
+      await expect(response.json()).resolves.toMatchObject({
+        decisions: expect.any(Array),
+      });
+    });
+
+    it("404s an unknown finding, exactly like the sibling route", async () => {
+      const { cookie } = await withSession("history-404@example.com", "VIEWER");
+
+      const response = await historyGet(
+        new Request(historyUrl("fnd_missing"), { headers: { cookie } }),
+        routeContext("fnd_missing"),
+      );
+
+      expect(response.status).toBe(404);
+      await expect(response.json()).resolves.toMatchObject({
+        error: { code: "NOT_FOUND" },
+      });
+    });
   });
 
   it("leaves scan ingestion on its own bearer token", async () => {
