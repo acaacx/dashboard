@@ -72,9 +72,14 @@ let fetchMock: ReturnType<typeof vi.fn>;
 
 beforeEach(() => {
   refresh.mockReset();
-  fetchMock = vi.fn().mockResolvedValue({
-    ok: true,
-    json: async () => page([]),
+  fetchMock = vi.fn().mockImplementation(async (input: RequestInfo | URL) => {
+    // The drawer's history loader shares global fetch with the list query;
+    // answer it with an empty trail so opening a row cannot crash on a Page
+    // being parsed as { decisions }.
+    if (String(input).includes("/history")) {
+      return { ok: true, json: async () => ({ decisions: [] }) };
+    }
+    return { ok: true, json: async () => page([]) };
   });
   vi.stubGlobal("fetch", fetchMock);
 });

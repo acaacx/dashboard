@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 
+import type { FindingDecision } from "@/domain/security/decision";
 import {
   categoryLabel,
   scannerLabel,
@@ -33,6 +34,7 @@ export function FindingDetails({
   onApplyStatus,
   onStatusChanged,
   canDecide = false,
+  loadHistory,
 }: {
   finding: SecurityFinding;
   onClose: () => void;
@@ -45,8 +47,41 @@ export function FindingDetails({
    * locked control. The action re-checks regardless.
    */
   canDecide?: boolean;
+  /**
+   * Loads the decision trail for this finding. Injected like `onApplyStatus`
+   * so the component stays fetch-free and tests await the injected call.
+   * Absent ⇒ no timeline at all, failing closed like `canDecide`.
+   */
+  loadHistory?: (id: string) => Promise<FindingDecision[]>;
 }) {
   const closeRef = useRef<HTMLButtonElement>(null);
+
+  const [history, setHistory] = useState<
+    | { kind: "loading" }
+    | { kind: "error" }
+    | { kind: "loaded"; decisions: FindingDecision[] }
+  >({ kind: "loading" });
+
+  useEffect(() => {
+    if (!loadHistory) return;
+    let cancelled = false;
+    setHistory({ kind: "loading" });
+    loadHistory(finding.id).then(
+      (decisions) => {
+        if (!cancelled) setHistory({ kind: "loaded", decisions });
+      },
+      () => {
+        // The audit view is not a gate: the drawer and the decision form stay
+        // usable when history cannot load.
+        if (!cancelled) setHistory({ kind: "error" });
+      },
+    );
+    return () => {
+      cancelled = true;
+    };
+    // statusChangedAt re-runs the fetch after a successful decision, so the
+    // timeline shows what was stored rather than an optimistic guess.
+  }, [loadHistory, finding.id, finding.statusChangedAt]);
 
   useEffect(() => {
     closeRef.current?.focus();
@@ -224,6 +259,48 @@ export function FindingDetails({
                   onStatusChanged={onStatusChanged}
                   locked={!canDecide}
                 />
+              )}
+            </Section>
+          )}
+
+          {loadHistory && (
+            <Section title="Decision history">
+              {history.kind === "loading" ? (
+                <p className="text-ink-faint text-sm">
+                  Loading decision history…
+                </p>
+              ) : history.kind === "error" ? (
+                <p className="text-ink-faint text-sm">
+                  Decision history could not be loaded.
+                </p>
+              ) : history.decisions.length === 0 ? (
+                /* The no-backfill decision, visible: findings decided before
+                   history shipped have a status but no recorded trail. */
+                <p className="text-ink-faint text-sm">
+                  Earlier decisions were not recorded.
+                </p>
+              ) : (
+                <ol className="divide-line divide-y">
+                  {history.decisions.map((decision) => (
+                    <li key={decision.id} className="py-2">
+                      <p className="text-ink text-xs">
+                        <span className="font-mono">{decision.decidedBy}</span>{" "}
+                        moved{" "}
+                        <span className="font-mono">{decision.fromStatus}</span>{" "}
+                        →{" "}
+                        <span className="font-mono">{decision.toStatus}</span>
+                      </p>
+                      <p className="text-ink-faint mt-0.5 font-mono text-[10px]">
+                        {formatDateTime(decision.decidedAt)}
+                      </p>
+                      {decision.reason && (
+                        <p className="text-ink-muted mt-1 text-sm leading-relaxed break-words whitespace-pre-wrap">
+                          {decision.reason}
+                        </p>
+                      )}
+                    </li>
+                  ))}
+                </ol>
               )}
             </Section>
           )}

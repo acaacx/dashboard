@@ -11,6 +11,7 @@ import {
   type FindingStatus,
   type Severity,
 } from "@/domain/security/enums";
+import type { FindingDecision } from "@/domain/security/decision";
 import type { Page, SecurityFinding } from "@/domain/security/finding";
 import { CategoryBadge, ScannerBadge, SeverityBadge, StatusBadge } from "@/components/ui/badge";
 import { EmptyState } from "@/components/ui/panel";
@@ -71,6 +72,22 @@ export const DEFAULT_QUERY_STATE: FindingsQueryState = {
   sortBy: "severity",
   sortDirection: "desc",
 };
+
+/**
+ * History loads through the API rather than inside FindingDetails, so the
+ * drawer stays fetch-free and component tests await an injected loader
+ * instead of stubbing global fetch.
+ */
+async function fetchDecisionHistory(id: string): Promise<FindingDecision[]> {
+  const response = await fetch(
+    `/api/security/findings/${encodeURIComponent(id)}/history`,
+  );
+  if (!response.ok) {
+    throw new Error(`History request failed with status ${response.status}`);
+  }
+  const body = (await response.json()) as { decisions: FindingDecision[] };
+  return body.decisions;
+}
 
 export function buildFindingsQuery(state: FindingsQueryState): string {
   const params = new URLSearchParams();
@@ -486,6 +503,7 @@ export function FindingsTable({
           onApplyStatus={setStatusAction}
           onStatusChanged={handleStatusChanged}
           canDecide={canDecide}
+          loadHistory={fetchDecisionHistory}
         />
       )}
     </div>
