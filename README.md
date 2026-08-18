@@ -67,7 +67,10 @@ decided that long before render.
 
 ```
 src/
-  domain/security/            enums, SecurityFinding, ScanRun, errors, inventory contracts
+  domain/security/            enums, SecurityFinding, ScanRun, FindingDecision, errors, inventory contracts
+  domain/auth/                User + Role, Session, auth errors
+  lib/auth/                   password, cookie, guards, safe-next, repository/, services/, container
+  lib/api/http.ts             JSON response + error-shape helpers
   lib/security/
     adapters/                 semgrep, trivy, checkov, gitleaks + registry
     parsers/sarif-parser.ts   generic SARIF 2.1.0 reader
@@ -81,12 +84,18 @@ src/
     observability.ts          lightweight event seam
     container.ts              composition root
   lib/db/pool.ts              PostgreSQL connection pool
+  lib/format.ts               shared display formatting
   providers/platform.ts       GitHub | Azure | Security provider seam
   app/api/security/           REST endpoints
   app/dashboard/              Overview, Security, Applications, Pipelines
+  app/login/                  login page + signIn / signOut Server Actions
   components/security/        charts, table, drawer, scanner status
+  components/shell/           sidebar, header, page chrome
+  components/ui/              shared primitives
+  proxy.ts                    cookie-presence redirect — NOT a security boundary
 db/migrations/                forward-only SQL migrations
 scripts/migrate.mjs           migration runner
+scripts/user.mjs              account provisioning CLI
 tests/                        unit + component + repository-contract tests
 ```
 
@@ -444,7 +453,7 @@ filters and the table automatically.
 
 Two interchangeable implementations of `SecurityFindingRepository` and
 `ScanRunRepository`. Both are verified against the **same contract test suite**
-(`tests/repository/repository-contract.ts`, 45 assertions), which is what makes
+(`tests/repository/repository-contract.ts`, 53 assertions), which is what makes
 "persistence is swappable" a fact rather than a hope.
 
 | Driver | When it is used | Trade-off |
@@ -487,6 +496,9 @@ rollback machinery to misunderstand.
 | `security_findings` | one row per normalized finding, keyed by `fingerprint` |
 | `scan_runs` | one row per scanner execution; scanner health is derived from these |
 | `finding_decisions` | append-only trail of human status decisions |
+| `users` | provisioned accounts: email, scrypt hash, `VIEWER` / `APPROVER` role |
+| `sessions` | one row per live session, keyed by the SHA-256 of the cookie token |
+| `login_attempts` | fixed-window failed-login counter, per email |
 | `schema_migrations` | applied migration versions |
 
 `fingerprint` is the **primary key**, so
@@ -505,18 +517,38 @@ Notes on the SQL:
 - filter values are always bound parameters; nothing is interpolated
 - `TIMESTAMPTZ` throughout, converted to ISO-8601 UTC at the repository boundary
 
-Migration `002_finding_status_reason.sql` adds `status_reason TEXT` and
-`status_changed_at TIMESTAMPTZ`, both nullable — every finding that predates it
-has no human decision attached. Neither column is indexed, because neither is
-filtered or sorted on.
+The migrations, in order:
+
+| File | What it adds |
+|---|---|
+| `001_init.sql` | `security_findings`, `scan_runs`, indexes |
+| `002_finding_status_reason.sql` | `status_reason TEXT`, `status_changed_at TIMESTAMPTZ` |
+| `003_auth.sql` | `users`, `sessions`, `login_attempts` |
+| `004_status_changed_by.sql` | `status_changed_by TEXT` |
+| `005_finding_decisions.sql` | `finding_decisions`, FK to the finding, cascade on delete |
+
+Every column added to `security_findings` after `001` is nullable, because each
+describes a human decision and every row predating the migration has none. None
+of them are indexed, because none are filtered or sorted on. `finding_decisions`
+does carry one index, `(finding_id, decided_at DESC)` — it is read per finding in
+exactly that order, so the drawer's query is a single index scan.
+
+`finding_decisions.finding_id` is a real foreign key with `ON DELETE CASCADE`,
+which `status_changed_by` deliberately is not: the repository exposes no delete
+for findings, so the constraint costs nothing and states the right behaviour for
+a path nothing exercises. `decided_by` is `NOT NULL` — `requireApprover()`
+guarantees an author, so an unsigned row is a bug and the schema says so.
 
 ### Changing a finding's status
 
-The write path is a **Next.js Server Action**, not an API route. There is no user
-authentication, and the only credential this app owns —
-`SECURITY_INGEST_TOKEN` — belongs to CI and cannot be shipped to a browser. A
-public endpoint able to mark a `CRITICAL` finding as a false positive is a direct
-way to hide a real vulnerability, so no such endpoint exists.
+The write path is a **Next.js Server Action**, not an API route. A public
+endpoint able to mark a `CRITICAL` finding as a false positive is a direct way to
+hide a real vulnerability, so no such endpoint exists — and the one credential CI
+holds, `SECURITY_INGEST_TOKEN`, is ingest-only and never reaches a browser.
+
+The action calls `requireApprover()` before it does anything else: a valid
+session, and the `APPROVER` role on top of it. See
+[Authentication](#authentication) and [Roles](#roles).
 
 The action returns a discriminated result rather than throwing: only
 `SecurityDomainError` messages, which are safe by construction, reach the
@@ -593,6 +625,8 @@ imports it.
 | `DATABASE_RETRY_BASE_DELAY_MS` | `100` | First backoff step; doubles per attempt. |
 | `DATABASE_RETRY_MAX_DELAY_MS` | `2000` | Ceiling for a single backoff step. |
 | `TEST_DATABASE_URL` | unset | Test-only. When set, the Postgres test suites run against it. **Wiped between tests.** |
+| `NODE_ENV` | set by Next | `production` adds `Secure` to the session cookie, refuses dev-account seeding, and strips internal error detail from responses. |
+| `USER_CLI_PASSWORD` | unset | Test/automation escape hatch for `npm run user`, which otherwise prompts. Prefer the prompt: an env var is readable by any process in the environment and lands in shell history. |
 
 ---
 
@@ -615,7 +649,9 @@ npm run user -- create --email you@example.com --role approver
 
 The password is prompted on stdin with echo disabled, never taken as a flag:
 argv is visible in `ps` and lands in shell history. Minimum length is 12
-characters, with no composition rules.
+characters, with no composition rules. `USER_CLI_PASSWORD` overrides the prompt
+for tests and automation — it exists because the suite has to drive the CLI
+non-interactively, and it is the worse option everywhere else.
 
 ```bash
 npm run user -- list
@@ -691,20 +727,21 @@ A decision records the deciding account's email on the finding as
 npm test
 ```
 
-384 tests without a database; 468 with one.
+421 tests without a database (five Postgres files skip); 513 with one.
 
 Covering adapters (all four, native JSON and SARIF), the SARIF parser, severity
 and category normalization, fingerprint determinism, deduplication, the finding
 lifecycle, statistics and trend calculation, scanner health, the SQL builders,
 and the findings table's rendering, filters and detail drawer.
 
-**The repository contract suites are the important ones.** The same 46 findings
+**The repository contract suites are the important ones.** The same 53 findings
 assertions run against both the in-memory and the PostgreSQL store, covering the
 awkward cases — NULL handling in filters, LIKE-metacharacter escaping, page
-clamping, tiebreak ordering, MTTR being undefined rather than zero. A second
-contract suite does the same for the 22 auth-store assertions: email case
-folding, session expiry boundaries, cascade on user deletion, and a throttle
-window that reopens. If the two drivers ever diverge, those suites fail.
+clamping, tiebreak ordering, MTTR being undefined rather than zero, and the
+append-only decision history. A second contract suite does the same for the 22
+auth-store assertions: email case folding, session expiry boundaries, cascade on
+user deletion, and a throttle window that reopens. If the two drivers ever
+diverge, those suites fail.
 
 To include the Postgres suites:
 

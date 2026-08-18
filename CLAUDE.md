@@ -50,13 +50,14 @@ Two drivers behind one interface, chosen in `src/lib/security/container.ts`:
 Both are verified by **the same contract suite**
 (`tests/repository/repository-contract.ts`). If you touch either implementation,
 that suite is the check that matters — it covers NULL filter handling, LIKE
-escaping, page clamping, tiebreak ordering and MTTR-undefined-not-zero.
+escaping, page clamping, tiebreak ordering, MTTR-undefined-not-zero and the
+append-only decision history.
 
 ```bash
 docker run -d --name dashboard-test-pg -e POSTGRES_PASSWORD=postgres \
   -e POSTGRES_DB=dashboard_test -p 5433:5432 postgres:17-alpine
 export TEST_DATABASE_URL=postgres://postgres:postgres@localhost:5433/dashboard_test
-npm test          # 486 tests; without the URL, 401 + 5 skipped
+npm test          # 513 tests; without the URL, 421 + 5 skipped
 ```
 
 Migrations are forward-only SQL in `db/migrations/`, applied by
