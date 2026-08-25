@@ -57,7 +57,7 @@ append-only decision history.
 docker run -d --name dashboard-test-pg -e POSTGRES_PASSWORD=postgres \
   -e POSTGRES_DB=dashboard_test -p 5433:5432 postgres:17-alpine
 export TEST_DATABASE_URL=postgres://postgres:postgres@localhost:5433/dashboard_test
-npm test          # 513 tests; without the URL, 421 + 5 skipped
+npm test          # 518 tests; without the URL, 426 + 5 skipped
 ```
 
 Migrations are forward-only SQL in `db/migrations/`, applied by
@@ -93,7 +93,10 @@ npm run lint && npm run typecheck && npm test && npm run build
 - **The secret-scan hook blocks credential-shaped literals**, including fake
   ones. Mock keys are assembled at runtime in `mock-scan-payloads.ts`.
 - Mock data is tuned to hit exactly 23 open / 3 critical / 7 high / 13 medium /
-  0 low. Changing the payloads changes those headline numbers.
+  0 low. Changing the payloads changes those headline numbers, and
+  `tests/mock/seed-mock-data.test.ts` fails when they move — the docs and the
+  demo screenshots quote them, so treat a failure there as "update both or put
+  the payload back", not as a number to bless.
 - **`src/proxy.ts` is not a security boundary.** It checks that a session cookie
   exists, never that it is valid. Next's own docs warn that a matcher change
   silently drops Server Function coverage, so every boundary validates for

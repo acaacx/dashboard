@@ -727,7 +727,7 @@ A decision records the deciding account's email on the finding as
 npm test
 ```
 
-421 tests without a database (five Postgres files skip); 513 with one.
+426 tests without a database (five Postgres files skip); 518 with one.
 
 Covering adapters (all four, native JSON and SARIF), the SARIF parser, severity
 and category normalization, fingerprint determinism, deduplication, the finding
